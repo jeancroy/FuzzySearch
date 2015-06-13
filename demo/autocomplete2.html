@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+
+    <meta charset="UTF-8">
+    <title></title>
+
+    <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
+    <script src="../src/FuzzyMatch.js"></script>
+
+
+</head>
+<body class="home">
+
+<style>
+
+    .twitter-typeahead, .twitter-typeahead input {
+        width: 500px;
+        padding: 10px;
+        display: inline-block;
+    }
+
+    .title {
+        color: #222;
+    }
+
+    .title strong {
+        color: #000;
+    }
+
+    .author {
+        color: #666
+    }
+
+    .author strong {
+        color: #444
+    }
+
+    .score {
+        color: #888;
+    }
+
+    .hh {
+        background-color: yellow;
+    }
+
+</style>
+
+<input id="tasksearch-query" name="tasksearch-query" autocomplete="off" type="text" width="500px">
+
+
+<script>
+
+
+    jQuery.getJSON("books.json").then(function (response) {
+
+        var fuzzyhound = new FuzzyMatch({
+            source: response,
+            keys: ["title", "author"]
+            //highlight_open_str: '<strong class="hh">'
+        });
+
+        $('#tasksearch-query').typeahead({
+                    minLength: 2
+                },
+                {
+                    name: 'task',
+                    source: fuzzyhound,
+                    display: "item.title",
+                    templates: {
+                        suggestion: function (suggestion) {
+                            var item = suggestion.item;
+                            var query = suggestion._query;
+                            return [
+
+                                "<div>",
+                                "<span class='title'>", fuzzyhound.highlight(query, item.title), "</span>|<span class='author'>", fuzzyhound.highlight(query, item.author), "</span><br>",
+                                "<span class='score'>( ", suggestion.match, " : ", suggestion.score.toFixed(2), " )</span><br><br>",
+                                "</div>"
+
+                            ].join("");
+                        },
+                        notFound: function (context) {
+                            return "<div class='typeahead-empty'> No result for \"" + context.query + "\"</div>"
+                        }
+                    }
+
+
+                }).bind('typeahead:select', function (ev, suggestion) {
+                    alert('Selection: ' + suggestion.item.title);
+                });
+
+
+    });
+
+    //a = "acabcda";
+    //b = "dcabda";
+
+    a = "acabbcda";
+    b = "dcaebbbda";
+
+    //console.log( lcs(b,a) );
+    //console.log( lcs_len(b,a) );
+    //console.log( LCS_large(a,b) );
+
+
+
+    /*
+    lcs("AZCABBCDA", "DCAEBBZBDA");
+    console.log(lcs_H09("AZCABBCDA", "DCAEBBZBDA"));
+    //console.log(lcs_H09("ZZZZAZCABBCDA", "ZZZZDCAEBBZBDA", 4));
+
+    lcs("gsurvey", "surgery");
+    console.log(lcs_H09("surgery","gsurvey"));
+*/
+
+
+
+
+</script>
+
+
+</body>
+</html>
