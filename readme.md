@@ -107,7 +107,7 @@ FuzzyMatch suport quite complex items, query is compared to specified field.
 First thing we do is to build a list of field value, normalised to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
 We support path (things.this.that).
 
-> Fields = ["cliche a paris, the","john middlename noe","1977","story","boy","00-11-22"]
+> Fields = ["cliche a paris, the","john middlename doe","1977","story","boy","00-11-22"]
 
 ### Item priority
 
@@ -116,12 +116,13 @@ more weigth to first keyword than second and so on.
 
 Bonus is exponentialy deaying. This is it give a marked difference betwen first and secodn item and not so much item 4th going on. 
 
-With (bonus_position_decay=0.5)  we have this: 
-bonus = 1+0.5^n
+With (d = bonus_position_decay)  we have this:
+bonus = 1+d^n
 
-|Position | 0   | 1   | 2   | 3   | 4   | 5   | 6   | 7   | 8    |
-|---------|-----|-----|-----|-----|-----|-----|-----|-----|------|
-|Bonus    | 2.0 | 1.5 | 1.25| 1.13| 1.06| 1.03| 1.02| 1.01| 1.003|
+|Position          | 0   | 1   | 2   | 3   | 4   | 5   | 6   | 7   | 8    |
+|------------------|-----|-----|-----|-----|-----|-----|-----|-----|------|
+|Bonus (d=0.5)     | 2.0 | 1.5 | 1.25| 1.13| 1.06| 1.03| 1.02| 1.01| 1.003|
+|Bonus (d=0.7071)  | 2.0 | 1.7 | 1.5 | 1.35| 1.25| 1.18| 1.13| 1.09| 1.063|
 
 
 ### Free word order
@@ -244,13 +245,6 @@ even worse, on relative error, they are very close...
     (pairing decision is now reversed at this point if we apply relative scoring)
 
 
-### Local vs Global matches
-
-
-
-
-
-
 ### Looking at similarities
 
 if we take absolute number of match we still have problems
@@ -273,6 +267,31 @@ This has some interesting properties:
     better score if we match more of a.
     better score if we match more of b.
     minimum score is m/(2a) even if b is infinitely large.
+
+
+Configuration
+==============
+
+
+| Parameter                | Default | Description |
+|--------------------------|---------|-------------|
+| minimum_match            | 1.0     | Minimum score to consider two token are not unrelated |
+| thresh_include           | 2.0     | To be a candidate score of item must be at least this |
+| thresh_relative_to_best  | 0.5     | and be at least this fraction of the best score |
+| field_good_enough        | 20      | If a field have this score stop searching other fields. (field score is before item related bonus) |
+| bonus_match_start        | 0.5     | Additional value per character in common prefix |
+| bonus_token_order        | 2.0     | Value of two token properly ordered |
+| bonus_position_decay     | 0.7     | Exponential decay for position bonus (smaller | more importance to first item) |
+| score_round              | 0.1     | Two item that have the same rounded score are sorted alphabetically |
+| output_match_detail      | true    | if false output original item if true output {score:...item:...match:... matchIndex:...} |
+| cache_fields             | true    |   |
+| max_search_tokens        | 10      | Because of free word order each search token add cost equivalent to one traversal additional tokens are lumped as a nth+1 token|
+| max_candidates           | 100     | Stop search after that many good candidate found Will trigger a recount to enforce relative_to_best rule|
+| highlight_prefix         | false   | true: force prefix as part of highlight (false: minimum gap slower)|
+| highlight_bridge_gap     | 2       | display small gap as substitution set to size of gap 0 to disable|
+| highlight_tk_max_size    | 64      | max size of a token for highlight algorithm (it is BVMAXSIZE(31) for search)|
+| highlight_before         | '<strong class="highlight">' |tag to put before the highlight|
+| highlight_after          |  '</strong>' | after the highlight    |
 
 
 
