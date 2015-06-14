@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <title></title>
 
-    <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
+    <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
     <script src="../src/FuzzyMatch.js"></script>
 
 
@@ -47,7 +47,7 @@
 
 </style>
 
-<input id="tasksearch-query" name="tasksearch-query" autocomplete="off" type="text" width="500px">
+<input id="demo-query" name="demo-query" autocomplete="off" type="text" width="500px">
 
 
 <script>
@@ -61,7 +61,7 @@
             //highlight_open_str: '<strong class="hh">'
         });
 
-        $('#tasksearch-query').typeahead({
+        $('#demo-query').typeahead({
                     minLength: 2
                 },
                 {
@@ -93,28 +93,6 @@
 
 
     });
-
-    //a = "acabcda";
-    //b = "dcabda";
-
-    a = "acabbcda";
-    b = "dcaebbbda";
-
-    //console.log( lcs(b,a) );
-    //console.log( lcs_len(b,a) );
-    //console.log( LCS_large(a,b) );
-
-
-
-    /*
-    lcs("AZCABBCDA", "DCAEBBZBDA");
-    console.log(lcs_H09("AZCABBCDA", "DCAEBBZBDA"));
-    //console.log(lcs_H09("ZZZZAZCABBCDA", "ZZZZDCAEBBZBDA", 4));
-
-    lcs("gsurvey", "surgery");
-    console.log(lcs_H09("surgery","gsurvey"));
-*/
-
 
 
 

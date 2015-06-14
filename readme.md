@@ -4,29 +4,44 @@ Fuzzymatch.js
 What is fuzzymatch.js ?
 -----------------------
 
-It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete.
-The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object.
-This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.
+It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object. This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.
 
 It perform three kind of operation:
 
 1. Searching
 
-    Perform the scoring operation on all item keyword.
+    Perform the scoring operation on all item keyword.  
     Manage logic of why an item would have a better overall score than another given multiple axproximately matched keyword
 
 2. Scoring
 
-    Given two word how clore are they ? Is word A closer to B or to C ? Is Match(A,B) worth less or more than Match(C,D) ?
+    Given two word how clore are they ?  
+    Is word A closer to B or to C ? Is Match(A,B) worth less or more than Match(C,D) ?  
     We try to answer those question in an autcomplete scenario. Error in what is already typed probably worth more than a character not yet typed.
     This would not be the case in a spellchecker setup for example.
 
 
 2. Highlighting
 
-    Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed.
-    Then we compute matching characters between the two tokens, taking special care to output the most compact
-    match when multiple one are possible.
+    Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed. Then we compute matching characters between the two tokens, taking special care to output the most compact match when multiple one are possible.
+
+Is this based on edit distance ?
+--------------------------------
+Short answer: No. Medium answer: Sort of. Long answer: there's a whole section below about how we calculate a score.
+
+All this to say, this provide a different scoring than typical levenshtein distance, it migth be better or worse suited to your application. For example in suggest-as-you-type scenario it might be better to show vague suggestion than nothing. For situation where we ask if two things are the same (preson, address, etc) it migth be better to have more strict positive matches.
+
+
+What is LCS ?
+----------------------
+Longest common substring. Shared character between two string in the rigth order. lcs(survey, surgery) = surey.
+
+Computer science often think similarity between two string in term of error (distance). And computational biology in term of matches. (We can view matching in Proteins, DNA, etc as a string problem).
+
+They are related but different problem and the bet of this project is that LCS could be useful for autocomplete scenario (with some help). As a bonus it's often faster to compute.
+
+
+
 
 
 
@@ -47,9 +62,7 @@ Then use the method search to perform a search
 Twiter typeahead
 ----------------
 
-Fuzzymatch support the __ttAdapter interface so it can be used instead of a BloodHound object.
-Setting no output filter output an abject with all match detail (score, matched field, original item)
-highlight is provided on demand, here we use it at template construction time
+Fuzzymatch support the \__ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time
 
     var books = [{"title":"First Book", "author":"John Doe"}, {"title":"...", "author":"..."}];
     var fuzzyhound = new FuzzyMatch({source:data, keys:["title","author"], output_map:"" });
@@ -114,10 +127,10 @@ We support path (things.this.that).
 It often make send to give more weight to the title than first keyword,
 more weight to first keyword than second and so on.
 
-Bonus is exponentialy decaying. This is it give a marked difference between first and second item and not so much item 4th going on. 
+Bonus is exponentialy decaying. This is it give a marked difference between first and second item and not so much item 4th going on.
 
 With (d = bonus_position_decay)  we have this:
-bonus = 1+d^n
+>bonus = 1+d^n
 
 |Position          | 0   | 1   | 2   | 3   | 4   | 5   | 6   | 7   | 8    |
 |------------------|-----|-----|-----|-----|-----|-----|-----|-----|------|
@@ -159,18 +172,15 @@ Score is average of
 
 ### Output score thresholding
 
-Default value are for suggestion as you type.
-In this case we prefer to show poor matches than nothing, match will improve as we type more.
+Default value are for suggestion as you type. In this case we prefer to show poor matches than nothing, match will improve as we type more.
 
 > Parameter thresh_include control the minimum score to show
 
-We also want to limit choices to a good match or a few good matches if those exist.
-For example if the best score is twice as good as the next best one, it's obviously the candidate to show.
+We also want to limit choices to a good match or a few good matches if those exist. For example if the best score is twice as good as the next best one, it's obviously the candidate to show.
 
 > Parameter thresh_relative_to_best control ratio of best match needed to be shown on the list
 
-Lastly if an item have multiple keyword, we might want to stop searching once we have found a good keyword.
-If a match is this good it'll be shown, no matter the best threshold.
+Lastly if an item have multiple keyword, we might want to stop searching once we have found a good keyword. If a match is this good it'll be shown, no matter the best threshold.
 
 > Parameter field_good_enough control the score needed to stop the search on this item.
 > It also control forced inclusion, not matter best
@@ -188,7 +198,7 @@ Internally we work on object like
         matchIndex:2
     }
 
-Disabling output mapping will get you this object.
+Disabling output mapping will get you this object.  
 Note that there's extra processing for recovering the match value.
 
 > outputmap="item"
@@ -204,10 +214,7 @@ Will give you a list of title.
 Scoring a token (in a auto-complete friendly manner)
 --------------------------------------------------
 
-There's two main way to count string similarity one is to count the number of matches
-the other one is to count the number of error. Those refer to the length of the
-longest common sub-sequence and the edit distance problem.
-(Here we'll consider only the simple edit distance with only insertion/deletion )
+There's two main way to count string similarity one is to count the number of matches the other one is to count the number of error. Those refer to the length of the longest common sub-sequence and the edit distance problem. (Here we'll consider only the simple edit distance with only insertion/deletion )
 
 Match are show with "|" and error are show with "-"
 
@@ -231,7 +238,7 @@ yet somehow uni -> university is a intuitive match.
 
 ### Looking at relative errors
 
-One way to deal with different match length is to normalize by the length
+One way to deal with different match length is to normalize by the length  
 Let's try to compare error count with length of second term...
 
     Second still have less error
@@ -254,19 +261,19 @@ if we take absolute number of match we still have problems
     match("unicorn","university")
     match("uni","ultra-nihilist")
 
-If we take fraction of second word, we cannot differentiate case 1 and 2. (3/10)
-If we take fraction of first word we cannot differentiate case 1 and 3. (3/3)
-If we take fraction of average length we cannot differentiate case 2 and 3 !! (3/8.5)
+- If we take fraction of second word, we cannot differentiate case 1 and 2. (3/10)  
+- If we take fraction of first word we cannot differentiate case 1 and 3. (3/3)  
+- If we take fraction of average length we cannot differentiate case 2 and 3 !! (3/8.5)  
 
 A solution to this could be to have a jaro-wrinkler like score.
-let m be number of matches, sa size of a, sb size of b.
-score = (m/a + m/b) /2;
+> let m be number of matches, sa size of a, sb size of b.  
+> score = (m/a + m/b) /2;
 
 This has some interesting properties:
 
-    better score if we match more of a.
-    better score if we match more of b.
-    minimum score is m/(2a) even if b is infinitely large.
+ - better score if we match more of a.
+ - better score if we match more of b.
+ - minimum score is m/(2a) even if b is infinitely large.
 
 
 Configuration
@@ -281,7 +288,7 @@ Configuration
 | field_good_enough        | 20      | If a field have this score stop searching other fields. (field score is before item related bonus) |
 | bonus_match_start        | 0.5     | Additional value per character in common prefix |
 | bonus_token_order        | 2.0     | Value of two token properly ordered |
-| bonus_position_decay     | 0.7     | Exponential decay for position bonus (smaller | more importance to first item) |
+| bonus_position_decay     | 0.7     | Exponential decay for position bonus (smaller: more importance to first item) |
 | score_round              | 0.1     | Two item that have the same rounded score are sorted alphabetically |
 | output_match_detail      | true    | if false output original item if true output {score:...item:...match:... matchIndex:...} |
 | cache_fields             | true    |   |
@@ -290,8 +297,8 @@ Configuration
 | highlight_prefix         | false   | true: force prefix as part of highlight (false: minimum gap slower)|
 | highlight_bridge_gap     | 2       | display small gap as substitution set to size of gap 0 to disable|
 | highlight_tk_max_size    | 64      | max size of a token for highlight algorithm (it is BVMAXSIZE(31) for search)|
-| highlight_before         | '<strong class="highlight">' |tag to put before the highlight|
-| highlight_after          |  '</strong>' | after the highlight    |
+| highlight_before         | &lt; strong class= "highlight" > |   tag to put before the highlight|
+| highlight_after          |  &lt;/strong> | after the highlight    |
 
 
 

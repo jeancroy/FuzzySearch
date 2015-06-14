@@ -1,6 +1,14 @@
-// FuzzyMatch.js
-// Created by Jean Christophe Roy on 2015-05-31.
-//
+/**
+ * FuzzyMatch.js
+ * Autocomplete suggestion engine using approximate string matching
+ * https://github.com/jeancroy/FuzzyMatch
+ *
+ * @license:
+ * Copyright (c) 2015, Jean Christophe Roy
+ * Licensed under The MIT License.
+ * http://opensource.org/licenses/MIT
+ */
+
 
 //
 // Search a query across multiple item
