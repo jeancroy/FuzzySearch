@@ -4,8 +4,8 @@ Fuzzymatch.js
 What is fuzzymatch.js ?
 -----------------------
 
-It is an approximate string matching library with focus on search and especially suggest-as-you-type autocomplete.
-The suggestion engine is complatible with twitter typeahead and can be used instead of a bloodhound object.
+It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete.
+The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object.
 This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.
 
 It perform three kind of operation:
@@ -89,10 +89,10 @@ General principle is to be very flexible in finding a match, prefer return a loo
 Scoring an item
 ----------------
 
-FuzzyMatch suport quite complex items, query is compared to specified field.
+FuzzyMatch support quite complex items, query is compared to specified field.
 
     book = {
-        Title: "Cliché à Paris, The",
+        Title: "ClichÃ© Ã  Paris, The",
         Year: 1977,
         Author: "John MiddleName Doe",
         Keywords:["Story","Boy"],
@@ -104,17 +104,17 @@ FuzzyMatch suport quite complex items, query is compared to specified field.
 
 > keys = ["Title","Author","Year","Keywords","Reference.ISSN"]
 
-First thing we do is to build a list of field value, normalised to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
+First thing we do is to build a list of field value, normalized to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
 We support path (things.this.that).
 
 > Fields = ["cliche a paris, the","john middlename doe","1977","story","boy","00-11-22"]
 
 ### Item priority
 
-It often make send to give more weigth to the title than first keyword,
-more weigth to first keyword than second and so on.
+It often make send to give more weight to the title than first keyword,
+more weight to first keyword than second and so on.
 
-Bonus is exponentialy deaying. This is it give a marked difference betwen first and secodn item and not so much item 4th going on. 
+Bonus is exponentialy decaying. This is it give a marked difference between first and second item and not so much item 4th going on. 
 
 With (d = bonus_position_decay)  we have this:
 bonus = 1+d^n
@@ -134,7 +134,7 @@ Those will all match the author keyword:
     Doe John
     John doe Midle
 
-Another example where free word order is useful woud be natural language query:
+Another example where free word order is useful would be natural language query:
 
 >How to paint my wall ?
 
@@ -142,14 +142,14 @@ Match:
 
 >Wall painting 101
 
-Flipside of alowing free word order is prefering properly ordered words. This is done by giving a bonus of (bonus_token_order) each time two consecutive token in the query are in order in the match
+Flip side of allowing free word order is preferring properly ordered words. This is done by giving a bonus of (bonus_token_order) each time two consecutive token in the query are in order in the match
 
 ### Multiple field matching
 
 > cliche 1977
 
 This query would match in both title and year field.
-Flipside of alowing Multiple field matching is giving preference to words in the same field:
+Flip side of allowing Multiple field matching is giving preference to words in the same field:
 
  >"john doe", two word, same field
 
@@ -169,8 +169,8 @@ For example if the best score is twice as good as the next best one, it's obviou
 
 > Parameter thresh_relative_to_best control ratio of best match needed to be shown on the list
 
-Lastly if an item have multiple keyword, we migth want to stop searching once we have found a good keyword.
-If a match is this good it'll be shown, no matter the best treshold.
+Lastly if an item have multiple keyword, we might want to stop searching once we have found a good keyword.
+If a match is this good it'll be shown, no matter the best threshold.
 
 > Parameter field_good_enough control the score needed to stop the search on this item.
 > It also control forced inclusion, not matter best
@@ -179,7 +179,7 @@ If a match is this good it'll be shown, no matter the best treshold.
 
 ### Output map
 
-Internaly we work on object like
+Internally we work on object like
 
     candidate = {
         score:8.1,
@@ -201,15 +201,15 @@ Will give you a list of title.
 
 
 
-Scoring a token (in a autocomplete friendly maner)
+Scoring a token (in a auto-complete friendly manner)
 --------------------------------------------------
 
-There'is two main way to count string similarity one is to count the number of matches
+There's two main way to count string similarity one is to count the number of matches
 the other one is to count the number of error. Those refer to the length of the
-longest comon subsequence and the edit distance problem.
+longest common sub-sequence and the edit distance problem.
 (Here we'll consider only the simple edit distance with only insertion/deletion )
 
-Macth are show with "|" and error are show with "-"
+Match are show with "|" and error are show with "-"
 
     match:
     sur-ve-y
@@ -226,10 +226,10 @@ Both are related, but when comparing score of different length they can lead to 
     match("uni","hi") : match 1, error 2
 
 First pairing have more match, second pairing have less error.
-Most algorythm available use edit distance (error)
+Most algorithm available use edit distance (error)
 yet somehow uni -> university is a intuitive match.
 
-### Looking at realtive errors
+### Looking at relative errors
 
 One way to deal with different match length is to normalize by the length
 Let's try to compare error count with length of second term...
@@ -295,27 +295,27 @@ Configuration
 
 
 
-Algorythm
+Algorithm
 =========
 
 Main bitvector algorythm
 
-> A fast and practical bit-vector algorithm for the longest common subsequence problem (Crochemore 2001)
+> A fast and practical bit-vector algorithm for the longest common sub-sequence problem (Crochemore 2001)
 > igm.univ-mlv.fr/~mac/REC/DOC/01-lcs_ipl.ps
 >
-> Bit-parallel LCS-length computation revisited (Hyyrö 2004)
+> Bit-parallel LCS-length computation revisited (HyyrÃ¶ 2004)
 > http://www.sis.uta.fi/~hh56766/pubs/awoca04.pdf
 
-Large string algorythm (used when previous algorythm would require >32 bit)
+Large string algorithm (used when previous algorithm would require >32 bit)
 
-> An input sensitive online algorithm for LCS computation (Hyyrö 2009)
+> An input sensitive online algorithm for LCS computation (HyyrÃ¶ 2009)
 > http://www.stringology.org/event/2009/p18.html
 > http://www.stringology.org/event/2009/psc09p18_presentation.pdf
 
-Pack muliple token into a single parralel computation
+Pack multiple token into a single parallel computation
 
 > Increased Bit-Parallelism
-> for Approximate and Multiple String Matching (Hyyrö 2006)
+> for Approximate and Multiple String Matching (HyyrÃ¶ 2006)
 > http://www.dcc.uchile.cl/~gnavarro/ps/jea06.pdf
 
 
