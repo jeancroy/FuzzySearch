@@ -34,20 +34,16 @@ Is this based on edit distance ?
 --------------------------------
 Short answer: No. Medium answer: Sort of. Long answer: there's a whole section below about how we calculate a score.
 
-All this to say, this provide a different scoring than typical levenshtein distance, it migth be better or worse suited to your application. For example in suggest-as-you-type scenario it might be better to show vague suggestion than nothing. For situation where we ask if two things are the same (preson, address, etc) it migth be better to have more strict positive matches.
+All this to say, this provide a different scoring than typical levenshtein distance, it might be better or worse suited to your application. For example in suggest-as-you-type scenario it might be better to show vague suggestion than nothing. For situation where we ask if two things are the same (person, address, etc) it might be better to have more strict positive matches.
 
 
 What is LCS ?
 ----------------------
-Longest common substring. Shared character between two string in the rigth order. lcs(survey, surgery) = surey.
+Longest common sub-sequence. Shared character between two string in the right order. lcs(survey, surgery) = surey.
 
 Computer science often think similarity between two string in term of error (distance). And computational biology in term of matches. (We can view matching in Proteins, DNA, etc as a string problem).
 
-They are related but different problem and the bet of this project is that LCS could be useful for autocomplete scenario (with some help). As a bonus it's often faster to compute.
-
-
-
-
+They are related but different problem and the bet of this project is that LCS could be useful for auto-complete scenario (with some help). As a bonus it's often faster to compute.
 
 
 Basic usage
@@ -66,7 +62,7 @@ Then use the method search to perform a search
     var result = searcher.search(query)
 ```
 
-Twiter typeahead
+Twitter typeahead
 ----------------
 
 Fuzzymatch support the \__ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time
@@ -123,7 +119,7 @@ FuzzyMatch support quite complex items, query is compared to specified field.
     }
 ```
 
-### Collect informations (And normalise)
+### Collect information (And normalize)
 
 ```javascript
 keys = ["Title","Author","Year","Keywords","Reference.ISSN"]
@@ -136,15 +132,17 @@ We support path (things.this.that).
 Fields = ["cliche a paris, the","john middlename doe","1977","story","boy","00-11-22"]
 ```
 
-### Item priority
+### Field priority
 
 It often make send to give more weight to the title than first keyword,
 more weight to first keyword than second and so on.
 
-Bonus is exponentialy decaying. This is it give a marked difference between first and second item and not so much item 4th going on.
+This is achieved using an exponentially decaying bonus. First item have twice the score then bonus decay to one. This is it give a marked difference between first and second item and not so much item 4th going on.
 
-With (d = bonus_position_decay)  we have this:
->bonus = 1+d^n
+Parameter (`d = bonus_position_decay`) control the decay:
+```javascript
+bonus = 1.0+d^n
+```
 
 |Position          | 0   | 1   | 2   | 3   | 4   | 5   | 6   | 7   | 8    |
 |------------------|-----|-----|-----|-----|-----|-----|-----|-----|------|
@@ -162,20 +160,15 @@ Those will all match the author keyword:
     John doe Midle
 
 Another example where free word order is useful would be natural language query:
+Match:  `How to paint my wall ?` against `Wall painting 101`
 
->How to paint my wall ?
-
-Match: 
-
->Wall painting 101
-
-Flip side of allowing free word order is preferring properly ordered words. This is done by giving a bonus of (bonus_token_order) each time two consecutive token in the query are in order in the match
+Flip side of allowing free word order is preferring properly ordered words. This is done by giving a bonus of (`bonus_token_order`) each time two consecutive token in the query are in order in the match
 
 ### Multiple field matching
 
 > cliche 1977
 
-This query would match in both title and year field.
+This query would match in both `title` and `year` field.
 Flip side of allowing Multiple field matching is giving preference to words in the same field:
 
  >"john doe", two word, same field
@@ -188,16 +181,15 @@ Score is average of
 
 Default value are for suggestion as you type. In this case we prefer to show poor matches than nothing, match will improve as we type more.
 
-> Parameter thresh_include control the minimum score to show
+> Parameter `thresh_include` control the minimum score to show
 
 We also want to limit choices to a good match or a few good matches if those exist. For example if the best score is twice as good as the next best one, it's obviously the candidate to show.
 
-> Parameter thresh_relative_to_best control ratio of best match needed to be shown on the list
+> Parameter `thresh_relative_to_best` control ratio of best match needed to be shown on the list
 
 Lastly if an item have multiple keyword, we might want to stop searching once we have found a good keyword. If a match is this good it'll be shown, no matter the best threshold.
 
-> Parameter field_good_enough control the score needed to stop the search on this item.
-> It also control forced inclusion, not matter best
+> Parameter `field_good_enough` control the score needed to stop the search on this item. It also control forced inclusion, not matter best
 
 
 
@@ -205,7 +197,7 @@ Lastly if an item have multiple keyword, we might want to stop searching once we
 
 #### Full detail
 
-Setting **outputmap=""** return the object as we use internally for sorting and scoring
+Setting `outputmap=""` return the object as we use internally for sorting and scoring
 
 ```javascript
     candidate = {
@@ -216,13 +208,13 @@ Setting **outputmap=""** return the object as we use internally for sorting and 
     }
 ```
 
-#### original detail
+#### Original detail
 
-Setting **outputmap="item"** give you back original item as given to the algorythm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)
+Setting `outputmap="item"` give you back original item as given to the algorithm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)
 
-#### property of original item
+#### Property of an original item
 
-If you only need the id or title of the original item you can do it like that **outputmap="item.property"**
+If you only need the id or title of the original item you can do it like that `outputmap="item.property"`
 
 
 
@@ -233,7 +225,6 @@ There's two main way to count string similarity one is to count the number of ma
 
 Match are show with "|" and error are show with "-"
 
-    match:
     sur-ve-y
     |||  | |
     surg-ery
@@ -243,7 +234,6 @@ match: 5, error: 3
 
 Both are related, but when comparing score of different length they can lead to different conclusions.
 
-    For example:
     match("uni","university") : match 3, error 7
     match("uni","hi") : match 1, error 2
 
@@ -253,36 +243,93 @@ yet somehow uni -> university is a intuitive match.
 
 ### Looking at relative errors
 
-One way to deal with different match length is to normalize by the length  
-Let's try to compare error count with length of second term...
+One way to deal with different match length is to normalize error count by the length. Which one? Let's try to compare error count with length of second term...
 
-    Second still have less error
-    7 error/10 char = 0,7 error/char
-    2 error/3 char = 0,666 error/char
+    match("uni","university") : 7 error/10 char = 0,7 error/char
+    match("uni","hi") : 2 error/3 char = 0,666 error/char
 
-even worse, on relative error, they are very close...
+Second match still have a lower relative error count.
+Even worse, the number of relative error are very close...
 
-    match("uni","universit") 6 error 9 char, 0,666 error/char
-    match("uni","universi") 5 error 8 char, 0,625 error/char
-    (pairing decision is now reversed at this point if we apply relative scoring)
+    match("uni","universit") : 6 error 9 char, 0,666 error/char
+    match("uni","universi") : 5 error 8 char, 0,625 error/char
+
+At that point pairing decision is now reversed. Relative error is not a very stable score.
+
+### Different similarity metric
+
+**Simple edit distance** consider only count the number of insert / delete operation needed to go from string A to string B. For example type/typo are at a distance of 2: `del[e], ins[o]`.
+
+**Levenshtein edit distance** add substitution.  For example type/typo are at a distance of 1: `subs[e,o]`. It improve over simple distance that wrong character error are not penalized twice. However it loose the ability to prefer transposition.
+
+**Damerau edit distance** add transposition operation. This has make a metric that do not over penalize substitution, but also prefer word that had letter swapped (not that simple edit distance had that transposition preference too)
+
+Each time we add operation we have the opportunity to better model the error, but it add computation cost
+
+#### Edit distance (lower is better)
+
+|Distance | ed | BULB / BOOB | ed | BULB / BLUB |
+|:---------|----|-------------|----|-------------|
+| Simple  | 4  |  `B--ULB Ins[OO]`<br> `BOO--B Del[UL]` | 2 |` B-ULB Ins[L]` <br> `BLU-B Del[L]` |
+| Levenshtein   | 2  |  Subs[U,O]<br>Subs[L,O] | 2 | Subs[U,L]<br>Subs[L,U] |
+| Damerau | 2 | Subs[U,O]<br>Subs[L,O] | 1 | Transpose[U,L] |
+
+#### Matching characters (LCS, higher is better)
+
+|Metric | L | BULB / BOOB | L | BULB / BLUB |
+|:------|---|-------------|---|-------------|
+| length of lcs  | 2  | BB | 3 | BUB or BLB |
 
 
-### Looking at similarities
+This metric is interesting for a number of reason. First we can remember the above case of `match("uni","university")` vs `match("uni","hi")` : intuitively we tend to count match rather than errors. Then this comparison show that counting match result in a scoring similar to Damerau-Levenshtein. No over-penalty on substitution and partial score for transposition.
 
-if we take absolute number of match we still have problems
+Possibly more interesting, length of LCS is fast to compute. Similar in complexity than simple edit distance. Indeed, if we set `m: length of string A`, `n: length of string B`, `ed: simple edit distance with unit cost`. `llcs:length of lcs`, we have:
 
-    all those have 3 matches:
-    match("uni","university")
-    match("unicorn","university")
-    match("uni","ultra-nihilist")
+> 2*llcs = m + n - ed
 
-- If we take fraction of second word, we cannot differentiate case 1 and 2. (3/10)  
-- If we take fraction of first word we cannot differentiate case 1 and 3. (3/3)  
-- If we take fraction of average length we cannot differentiate case 2 and 3 !! (3/8.5)  
+So basically we can learn from that than:
+ - If we have either llcs or simple edit distance we can get compute the other.
+ - The 2 in front of llcs is the reason we do not double penalize substitution.
 
-A solution to this could be to have a jaro-wrinkler like score.
-> let m be number of matches, sa size of a, sb size of b.  
-> score = (m/a + m/b) /2;
+Please note that while `find the longest subsequence between A and B` and `find the shortest edit distance between A and B` are equivalent while comparing all of A versus all of B (Global match). They are not equivalent while comparing part of A versus part of B (Local match) or all of A versus part of B (Semi-Global, search a needle in a haystack). This explain that they are different research topic with different typical use.
+
+Furthermore, the resulting score are not equivalent while sorting a list of possible matches of varying length. This is the point we tried to make while comparing `"uni"` to `["hi","university"]`. The hypothesis behind this project is that counting matches is more intuitive and should better match user expectation in an interactive user interface.
+
+##### But, is there a catch ?
+
+Where simple edit distance can be overly severe, llcs can be overly optimistic.
+Matching 3 out of 4 character, or matching 3 out of 40 both give a score of 3.
+To some extend we want this (better to show something than nothing).
+But, we also want to give better score to better match, so we have to find to include back some information about error.
+
+### Looking for a score relative to input length
+
+Let's consider those three cases:
+
+```javascript
+    match("uni","university")     // case 1
+    match("unicorn","university") // case 2
+    match("uni","ultra-nihilist") // case 3
+```
+
+Let m be the number of matches
+
+- If we compare m to second word length,
+	- we cannot differentiate case 1 and 2. (3/10)
+- we compare m to first word length,
+	- we cannot differentiate case 1 and 3. (3/3)
+- If we compare m to average of both length,
+	-  we cannot differentiate case 2 and 3 !! (3/8.5)
+
+From that we learn that we want to include both length, but not in the form of arythmetic average of both. We need to do more research !
+
+#### Jaro–Winkler distance
+
+The [Jaro–Winkler distance ](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance) is an heuristic algorithm for string matching. It's fast and perform well in different comparison.  In particular the *Jaro* distance use an approximation of LCS and then report it back to a score ranging from 0-1, combining length of both string. *Wrinkler* add the idea to give a bonus for common prefix, prefix bonus looks like something that fit well in a auto-complete scenario.
+
+Let's examine a jaro like score: let `m: be number of matches`, `sa: size of a`, `sb: size of b`.
+
+    score = (m/sa + m/sb) /2;
 
 This has some interesting properties:
 
@@ -290,13 +337,41 @@ This has some interesting properties:
  - better score if we match more of b.
  - minimum score is m/(2a) even if b is infinitely large.
 
+We do not have access to a number of transposition like *Jaro*, BUT lcs restrict matches to those that are in correct order, so we have some transposition effect built-in the value of llcs.
+
+#### Prefix
+
+There's some very efficient way to compute number of matches between two string, but most of them rely on simplifying the original problem. One such simplification is to only store the score and not the different possible path possible to reach that score.
+
+On the flip side, human most often input start of word rather than something in the middle. Prefix is a common sub-string of both inputs that start at first character. It's fast to compute, and allow to shrink the problem size for llcs computation. We'll add some bonus for common prefix controlled by `bonus_match_start`. That's the Winkler like part of our scoring algorithm.
+
+Compromise of using exact prefix is that a typo at the start of the word will stop  match, so it can induce a heavy penalty.
+
+#### Matching multiple keywords
+
+For matching a single token, we have a pretty interesting solution. However testing revealed that this scoring scheme gave disproportionate importance to small words. For example matching perfectly `of` or matching perfectly `Honorificabilitudinitatibus` both give a score of 1. However one is clearly easier to match than the other.
+
+We'll use the match length as a shortcut to specificity. (Doing this, we assume common words are short to use least amount of effort for a specific communication need).
+
+We multiply Jaro-like score by llcs and the score become:
+```javascript
+	score = 0.5*m*(m/sa + m/sb)  + bonus*prefix;
+```
+
+Having m squared give the advantage of even better score for good matches and worse score for bad match. It lower the likelihood of multiple bad match out-score a single good match. A character matched in a good token is now worth more than a character matched in a bad token.
+
+
+
+
+
+
 
 Configuration
 ==============
 
 
 | Parameter                | Default | Description |
-|--------------------------|---------|-------------|
+|:--------------------------|---------|-------------|
 | minimum_match            | 1.0     | Minimum score to consider two token are not unrelated |
 | thresh_include           | 2.0     | To be a candidate score of item must be at least this |
 | thresh_relative_to_best  | 0.5     | and be at least this fraction of the best score |
@@ -306,19 +381,19 @@ Configuration
 | bonus_position_decay     | 0.7     | Exponential decay for position bonus (smaller: more importance to first item) |
 | score_round              | 0.1     | Two item that have the same rounded score are sorted alphabetically |
 | output_match_detail      | true    | if false output original item if true output {score:...item:...match:... matchIndex:...} |
-| cache_fields             | true    |   |
+| cache_fields             | true    | Perform the "collect" step only once and store result. Save computation time but use duplicate indexed fields  |
 | max_search_tokens        | 10      | Because of free word order each search token add cost equivalent to one traversal additional tokens are lumped as a nth+1 token|
 | max_candidates           | 100     | Stop search after that many good candidate found Will trigger a recount to enforce relative_to_best rule|
 | highlight_prefix         | false   | true: force prefix as part of highlight (false: minimum gap slower)|
 | highlight_bridge_gap     | 2       | display small gap as substitution set to size of gap 0 to disable|
 | highlight_tk_max_size    | 64      | max size of a token for highlight algorithm (it is BVMAXSIZE(31) for search)|
-| highlight_before         | &lt; strong class= "highlight" > |   tag to put before the highlight|
-| highlight_after          |  &lt;/strong> | after the highlight    |
+| highlight_before         | ...     |   tag to put before the highlight <br> `default: <strong class="highlight">`|
+| highlight_after          |  ...    | after the highlight <br> `default: </strong>`   |
 
 
 
-Algorithm
-=========
+Algorithms
+==========
 
 Main bitvector algorythm
 
