@@ -25,6 +25,11 @@ It perform three kind of operation:
 
     Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed. Then we compute matching characters between the two tokens, taking special care to output the most compact match when multiple one are possible.
 
+Can I see a demo ?
+------------------
+
+ [You can view the demo page here](https://cdn.rawgit.com/jeancroy/FuzzyMatch/master/demo/autocomplete.html)
+
 Is this based on edit distance ?
 --------------------------------
 Short answer: No. Medium answer: Sort of. Long answer: there's a whole section below about how we calculate a score.
@@ -54,44 +59,47 @@ Minimalist
 Basic usage is to create an object that specify the data and keys to be indexed
 Then use the method search to perform a search
 
+```javascript
     var data = ["survey","surgery","insurgence"];
     var searcher = new FuzzyMatch({source:data, output_map:"item"});
     var query = "assurance";
     var result = searcher.search(query)
+```
 
 Twiter typeahead
 ----------------
 
 Fuzzymatch support the \__ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time
 
-    var books = [{"title":"First Book", "author":"John Doe"}, {"title":"...", "author":"..."}];
-    var fuzzyhound = new FuzzyMatch({source:data, keys:["title","author"], output_map:"" });
+```javascript
+var books = [{"title":"First Book", "author":"John Doe"}, {"title":"...", "author":"..."}];
+var fuzzyhound = new FuzzyMatch({source:data, keys:["title","author"], output_map:"" });
 
-    $('#typeahead-input').typeahead({ minLength: 2 }, {
-        name: 'fuzzyhound',
-        source: fuzzyhound,
-        display: "item.title",
-        templates: {
-            suggestion: function (suggestion) {
-                var item = suggestion.item;
-                var query = suggestion._query;
-                return [
-                    "<div>",
-                    "<span class='title'>", fuzzyhound.highlight(query, item.title), "</span>|",
-                    "<span class='author'>", fuzzyhound.highlight(query, item.author), "</span><br>",
-                    "<span class='score'>( ", suggestion.match, " : ", suggestion.score.toFixed(2), " )</span>",
-                    "</div>"
+$('#typeahead-input').typeahead({ minLength: 2 }, {
+    name: 'fuzzyhound',
+    source: fuzzyhound,
+    display: "item.title",
+    templates: {
+        suggestion: function (suggestion) {
+            var item = suggestion.item;
+            var query = suggestion._query;
+            return [
+                "<div>",
+                "<span class='title'>", fuzzyhound.highlight(query, item.title), "</span>|",
+                "<span class='author'>", fuzzyhound.highlight(query, item.author), "</span><br>",
+                "<span class='score'>( ", suggestion.match, " : ", suggestion.score.toFixed(2), " )</span>",
+                "</div>"
 
-                ].join("");
-            },
-            notFound: function (context) {
-                return "<div class='typeahead-empty'> No result for \"" + context.query + "\"</div>"
-            }
+            ].join("");
+        },
+        notFound: function (context) {
+            return "<div class='typeahead-empty'> No result for \"" + context.query + "\"</div>"
         }
-
-
     }
 
+
+}
+```
 
 
 Scoring overview
@@ -104,6 +112,7 @@ Scoring an item
 
 FuzzyMatch support quite complex items, query is compared to specified field.
 
+```javascript
     book = {
         Title: "Cliché à Paris, The",
         Year: 1977,
@@ -112,15 +121,20 @@ FuzzyMatch support quite complex items, query is compared to specified field.
         Reference:{ISSN:"00-11-22", ARK:"AA-BB-CC"},
         Available:4
     }
+```
 
 ### Collect informations (And normalise)
 
-> keys = ["Title","Author","Year","Keywords","Reference.ISSN"]
+```javascript
+keys = ["Title","Author","Year","Keywords","Reference.ISSN"]
+```
 
 First thing we do is to build a list of field value, normalized to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
 We support path (things.this.that).
 
-> Fields = ["cliche a paris, the","john middlename doe","1977","story","boy","00-11-22"]
+```javascript
+Fields = ["cliche a paris, the","john middlename doe","1977","story","boy","00-11-22"]
+```
 
 ### Item priority
 
@@ -189,25 +203,26 @@ Lastly if an item have multiple keyword, we might want to stop searching once we
 
 ### Output map
 
-Internally we work on object like
+#### Full detail
 
+Setting **outputmap=""** return the object as we use internally for sorting and scoring
+
+```javascript
     candidate = {
         score:8.1,
-        item:{},
+        item:{}, //original item
         match:"1977",
         matchIndex:2
     }
+```
 
-Disabling output mapping will get you this object.  
-Note that there's extra processing for recovering the match value.
+#### original detail
 
-> outputmap="item"
+Setting **outputmap="item"** give you back original item as given to the algorythm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)
 
-Will give you your original item
+#### property of original item
 
-> outputmap="item.Title"
-
-Will give you a list of title.
+If you only need the id or title of the original item you can do it like that **outputmap="item.property"**
 
 
 
