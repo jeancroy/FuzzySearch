@@ -31,10 +31,10 @@
       </header>
       <section>
         <h1>
-<a id="fuzzymatchjs" class="anchor" href="#fuzzymatchjs" aria-hidden="true"><span class="octicon octicon-link"></span></a>Fuzzymatch.js</h1>
+<a id="fuzzysearchjs" class="anchor" href="#fuzzysearchjs" aria-hidden="true"><span class="octicon octicon-link"></span></a>FuzzySearch.js</h1>
 
 <h2>
-<a id="what-is-fuzzymatchjs-" class="anchor" href="#what-is-fuzzymatchjs-" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is fuzzymatch.js ?</h2>
+<a id="what-is-fuzzysearchjs-" class="anchor" href="#what-is-fuzzysearchjs-" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is FuzzySearch.js ?</h2>
 
 <p>It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object. This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.</p>
 
@@ -65,7 +65,7 @@ This would not be the case in a spellchecker setup for example.</p>
 <h2>
 <a id="can-i-see-a-demo-" class="anchor" href="#can-i-see-a-demo-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Can I see a demo ?</h2>
 
-<p><a href="https://cdn.rawgit.com/jeancroy/FuzzyMatch/master/demo/autocomplete.html">You can view the demo page here</a></p>
+<p><a href="https://cdn.rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html">You can view the demo page here</a></p>
 
 <h2>
 <a id="is-this-based-on-edit-distance-" class="anchor" href="#is-this-based-on-edit-distance-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Is this based on edit distance ?</h2>
@@ -93,17 +93,17 @@ This would not be the case in a spellchecker setup for example.</p>
 Then use the method search to perform a search</p>
 
 <div class="highlight highlight-javascript"><pre>    <span class="pl-k">var</span> data <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>survey<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>surgery<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>insurgence<span class="pl-pds">"</span></span>];
-    <span class="pl-k">var</span> searcher <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzyMatch</span>({source<span class="pl-k">:</span>data, output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>item<span class="pl-pds">"</span></span>});
+    <span class="pl-k">var</span> searcher <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzySearch</span>({source<span class="pl-k">:</span>data, output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>item<span class="pl-pds">"</span></span>});
     <span class="pl-k">var</span> query <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>assurance<span class="pl-pds">"</span></span>;
     <span class="pl-k">var</span> result <span class="pl-k">=</span> searcher.<span class="pl-c1">search</span>(query)</pre></div>
 
 <h2>
 <a id="twitter-typeahead" class="anchor" href="#twitter-typeahead" aria-hidden="true"><span class="octicon octicon-link"></span></a>Twitter typeahead</h2>
 
-<p>Fuzzymatch support the __ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time</p>
+<p>FuzzySearch support the __ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time</p>
 
 <div class="highlight highlight-javascript"><pre><span class="pl-k">var</span> books <span class="pl-k">=</span> [{<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>First Book<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>John Doe<span class="pl-pds">"</span></span>}, {<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>...<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>...<span class="pl-pds">"</span></span>}];
-<span class="pl-k">var</span> fuzzyhound <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzyMatch</span>({source<span class="pl-k">:</span>data, keys<span class="pl-k">:</span>[<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span>], output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span> });
+<span class="pl-k">var</span> fuzzyhound <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzySearch</span>({source<span class="pl-k">:</span>data, keys<span class="pl-k">:</span>[<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span>], output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span> });
 
 $(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="pl-pds">'</span></span>).typeahead({ minLength<span class="pl-k">:</span> <span class="pl-c1">2</span> }, {
     name<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">'</span>fuzzyhound<span class="pl-pds">'</span></span>,
@@ -138,7 +138,7 @@ $(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="p
 <h2>
 <a id="scoring-an-item" class="anchor" href="#scoring-an-item" aria-hidden="true"><span class="octicon octicon-link"></span></a>Scoring an item</h2>
 
-<p>FuzzyMatch support quite complex items, query is compared to specified field.</p>
+<p>FuzzySearch support quite complex items, query is compared to specified field.</p>
 
 <div class="highlight highlight-javascript"><pre>    book <span class="pl-k">=</span> {
         Title<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>Cliché à Paris, The<span class="pl-pds">"</span></span>,
@@ -648,6 +648,20 @@ igm.univ-mlv.fr/~mac/REC/DOC/01-lcs_ipl.ps</p>
 <p>Increased Bit-Parallelism
 for Approximate and Multiple String Matching (Hyyrö 2006)
 <a href="http://www.dcc.uchile.cl/%7Egnavarro/ps/jea06.pdf">http://www.dcc.uchile.cl/~gnavarro/ps/jea06.pdf</a></p>
+</blockquote>
+
+<p>Sequence alignment (highligth)</p>
+
+<blockquote>
+<p>Smith Waterman Gotoh
+<a href="http://www.bioinf.uni-freiburg.de/Lehre/Courses/2014_SS/V_Bioinformatik_1/gap-penalty-gotoh.pdf">http://www.bioinf.uni-freiburg.de/Lehre/Courses/2014_SS/V_Bioinformatik_1/gap-penalty-gotoh.pdf</a>
+<a href="http://telliott99.blogspot.ca/2009/08/alignment-affine-gap-penalties_08.html">http://telliott99.blogspot.ca/2009/08/alignment-affine-gap-penalties_08.html</a></p>
+</blockquote>
+
+<p>Compaison of some string similarity</p>
+
+<blockquote>
+<p><a href="https://asecuritysite.com/forensics/simstring">https://asecuritysite.com/forensics/simstring</a></p>
 </blockquote>
       </section>
       <footer>
