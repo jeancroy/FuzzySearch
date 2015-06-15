@@ -1,7 +1,7 @@
-Fuzzymatch.js
+FuzzySearch.js
 =====================
 
-What is fuzzymatch.js ?
+What is FuzzySearch.js ?
 -----------------------
 
 It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object. This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.
@@ -28,7 +28,7 @@ It perform three kind of operation:
 Can I see a demo ?
 ------------------
 
- [You can view the demo page here](https://cdn.rawgit.com/jeancroy/FuzzyMatch/master/demo/autocomplete.html)
+ [You can view the demo page here](https://cdn.rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)
 
 Is this based on edit distance ?
 --------------------------------
@@ -57,7 +57,7 @@ Then use the method search to perform a search
 
 ```javascript
     var data = ["survey","surgery","insurgence"];
-    var searcher = new FuzzyMatch({source:data, output_map:"item"});
+    var searcher = new FuzzySearch({source:data, output_map:"item"});
     var query = "assurance";
     var result = searcher.search(query)
 ```
@@ -65,11 +65,11 @@ Then use the method search to perform a search
 Twitter typeahead
 ----------------
 
-Fuzzymatch support the \__ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time
+FuzzySearch support the \__ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time
 
 ```javascript
 var books = [{"title":"First Book", "author":"John Doe"}, {"title":"...", "author":"..."}];
-var fuzzyhound = new FuzzyMatch({source:data, keys:["title","author"], output_map:"" });
+var fuzzyhound = new FuzzySearch({source:data, keys:["title","author"], output_map:"" });
 
 $('#typeahead-input').typeahead({ minLength: 2 }, {
     name: 'fuzzyhound',
@@ -106,7 +106,7 @@ General principle is to be very flexible in finding a match, prefer return a loo
 Scoring an item
 ----------------
 
-FuzzyMatch support quite complex items, query is compared to specified field.
+FuzzySearch support quite complex items, query is compared to specified field.
 
 ```javascript
     book = {
@@ -415,6 +415,11 @@ Pack multiple token into a single parallel computation
 > for Approximate and Multiple String Matching (Hyyrö 2006)
 > http://www.dcc.uchile.cl/~gnavarro/ps/jea06.pdf
 
+Sequence alignment (highligth)
+> Smith Waterman Gotoh
+> http://www.bioinf.uni-freiburg.de/Lehre/Courses/2014_SS/V_Bioinformatik_1/gap-penalty-gotoh.pdf
+> http://telliott99.blogspot.ca/2009/08/alignment-affine-gap-penalties_08.html
 
-
+Compaison of some string similarity
+> https://asecuritysite.com/forensics/simstring
 

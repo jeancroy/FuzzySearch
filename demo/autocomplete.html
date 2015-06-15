@@ -5,9 +5,9 @@
     <meta charset="UTF-8">
     <title></title>
 
-    <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
-    <script src="../src/FuzzyMatch.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
+    <script src="../src/FuzzySearch.js"></script>
 
 
 </head>
@@ -47,6 +47,9 @@
 
 </style>
 
+Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. <br/>
+Show suggestion from <a href="books.json">this dataset</a>.  <br/>
+
 <input id="demo-query" name="demo-query" autocomplete="off" type="text" width="500px">
 
 
@@ -55,7 +58,7 @@
 
     jQuery.getJSON("books.json").then(function (response) {
 
-        var fuzzyhound = new FuzzyMatch({
+        var fuzzyhound = new FuzzySearch({
             source: response,
             keys: ["title", "author"]
             //highlight_open_str: '<strong class="hh">'
@@ -83,6 +86,9 @@
                         },
                         notFound: function (context) {
                             return "<div class='typeahead-empty'> No result for \"" + context.query + "\"</div>"
+                        },
+                        footer: function(context){
+                            return "<div class='typeahead-footer'> Search took " + fuzzyhound.search_time.toFixed(3) + " ms</div>"
                         }
                     }
 
