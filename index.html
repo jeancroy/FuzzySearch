@@ -1,0 +1,660 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>FuzzySearch by jeancroy</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">FuzzySearch</h1>
+        <p class="header">Autocomplete suggestion provider using approximate string matching</p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/jeancroy/FuzzySearch/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/jeancroy/FuzzySearch/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/jeancroy/FuzzySearch">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/jeancroy">jeancroy</a></p>
+
+
+      </header>
+      <section>
+        <h1>
+<a id="fuzzymatchjs" class="anchor" href="#fuzzymatchjs" aria-hidden="true"><span class="octicon octicon-link"></span></a>Fuzzymatch.js</h1>
+
+<h2>
+<a id="what-is-fuzzymatchjs-" class="anchor" href="#what-is-fuzzymatchjs-" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is fuzzymatch.js ?</h2>
+
+<p>It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object. This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.</p>
+
+<p>It perform three kind of operation:</p>
+
+<ol>
+<li>
+<p>Searching</p>
+
+<p>Perform the scoring operation on all item keyword.<br>
+Manage logic of why an item would have a better overall score than another given multiple axproximately matched keyword</p>
+</li>
+<li>
+<p>Scoring</p>
+
+<p>Given two word how clore are they ?<br>
+Is word A closer to B or to C ? Is Match(A,B) worth less or more than Match(C,D) ?<br>
+We try to answer those question in an autcomplete scenario. Error in what is already typed probably worth more than a character not yet typed.
+This would not be the case in a spellchecker setup for example.</p>
+</li>
+<li>
+<p>Highlighting</p>
+
+<p>Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed. Then we compute matching characters between the two tokens, taking special care to output the most compact match when multiple one are possible.</p>
+</li>
+</ol>
+
+<h2>
+<a id="can-i-see-a-demo-" class="anchor" href="#can-i-see-a-demo-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Can I see a demo ?</h2>
+
+<p><a href="https://cdn.rawgit.com/jeancroy/FuzzyMatch/master/demo/autocomplete.html">You can view the demo page here</a></p>
+
+<h2>
+<a id="is-this-based-on-edit-distance-" class="anchor" href="#is-this-based-on-edit-distance-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Is this based on edit distance ?</h2>
+
+<p>Short answer: No. Medium answer: Sort of. Long answer: there's a whole section below about how we calculate a score.</p>
+
+<p>All this to say, this provide a different scoring than typical levenshtein distance, it might be better or worse suited to your application. For example in suggest-as-you-type scenario it might be better to show vague suggestion than nothing. For situation where we ask if two things are the same (person, address, etc) it might be better to have more strict positive matches.</p>
+
+<h2>
+<a id="what-is-lcs-" class="anchor" href="#what-is-lcs-" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is LCS ?</h2>
+
+<p>Longest common sub-sequence. Shared character between two string in the right order. lcs(survey, surgery) = surey.</p>
+
+<p>Computer science often think similarity between two string in term of error (distance). And computational biology in term of matches. (We can view matching in Proteins, DNA, etc as a string problem).</p>
+
+<p>They are related but different problem and the bet of this project is that LCS could be useful for auto-complete scenario (with some help). As a bonus it's often faster to compute.</p>
+
+<h1>
+<a id="basic-usage" class="anchor" href="#basic-usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic usage</h1>
+
+<h2>
+<a id="minimalist" class="anchor" href="#minimalist" aria-hidden="true"><span class="octicon octicon-link"></span></a>Minimalist</h2>
+
+<p>Basic usage is to create an object that specify the data and keys to be indexed
+Then use the method search to perform a search</p>
+
+<div class="highlight highlight-javascript"><pre>    <span class="pl-k">var</span> data <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>survey<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>surgery<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>insurgence<span class="pl-pds">"</span></span>];
+    <span class="pl-k">var</span> searcher <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzyMatch</span>({source<span class="pl-k">:</span>data, output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>item<span class="pl-pds">"</span></span>});
+    <span class="pl-k">var</span> query <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>assurance<span class="pl-pds">"</span></span>;
+    <span class="pl-k">var</span> result <span class="pl-k">=</span> searcher.<span class="pl-c1">search</span>(query)</pre></div>
+
+<h2>
+<a id="twitter-typeahead" class="anchor" href="#twitter-typeahead" aria-hidden="true"><span class="octicon octicon-link"></span></a>Twitter typeahead</h2>
+
+<p>Fuzzymatch support the __ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time</p>
+
+<div class="highlight highlight-javascript"><pre><span class="pl-k">var</span> books <span class="pl-k">=</span> [{<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>First Book<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>John Doe<span class="pl-pds">"</span></span>}, {<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>...<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>...<span class="pl-pds">"</span></span>}];
+<span class="pl-k">var</span> fuzzyhound <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzyMatch</span>({source<span class="pl-k">:</span>data, keys<span class="pl-k">:</span>[<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span>], output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span> });
+
+$(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="pl-pds">'</span></span>).typeahead({ minLength<span class="pl-k">:</span> <span class="pl-c1">2</span> }, {
+    name<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">'</span>fuzzyhound<span class="pl-pds">'</span></span>,
+    source<span class="pl-k">:</span> fuzzyhound,
+    display<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>item.title<span class="pl-pds">"</span></span>,
+    templates<span class="pl-k">:</span> {
+        <span class="pl-en">suggestion</span>: <span class="pl-k">function</span> (<span class="pl-smi">suggestion</span>) {
+            <span class="pl-k">var</span> item <span class="pl-k">=</span> suggestion.item;
+            <span class="pl-k">var</span> query <span class="pl-k">=</span> suggestion._query;
+            <span class="pl-k">return</span> [
+                <span class="pl-s"><span class="pl-pds">"</span>&lt;div&gt;<span class="pl-pds">"</span></span>,
+                <span class="pl-s"><span class="pl-pds">"</span>&lt;span class='title'&gt;<span class="pl-pds">"</span></span>, fuzzyhound.highlight(query, item.<span class="pl-c1">title</span>), <span class="pl-s"><span class="pl-pds">"</span>&lt;/span&gt;|<span class="pl-pds">"</span></span>,
+                <span class="pl-s"><span class="pl-pds">"</span>&lt;span class='author'&gt;<span class="pl-pds">"</span></span>, fuzzyhound.highlight(query, item.author), <span class="pl-s"><span class="pl-pds">"</span>&lt;/span&gt;&lt;br&gt;<span class="pl-pds">"</span></span>,
+                <span class="pl-s"><span class="pl-pds">"</span>&lt;span class='score'&gt;( <span class="pl-pds">"</span></span>, suggestion.match, <span class="pl-s"><span class="pl-pds">"</span> : <span class="pl-pds">"</span></span>, suggestion.score.toFixed(<span class="pl-c1">2</span>), <span class="pl-s"><span class="pl-pds">"</span> )&lt;/span&gt;<span class="pl-pds">"</span></span>,
+                <span class="pl-s"><span class="pl-pds">"</span>&lt;/div&gt;<span class="pl-pds">"</span></span>
+
+            ].<span class="pl-c1">join</span>(<span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span>);
+        },
+        <span class="pl-en">notFound</span>: <span class="pl-k">function</span> (<span class="pl-smi">context</span>) {
+            <span class="pl-k">return</span> <span class="pl-s"><span class="pl-pds">"</span>&lt;div class='typeahead-empty'&gt; No result for <span class="pl-cce">\"</span><span class="pl-pds">"</span></span> <span class="pl-k">+</span> context.query <span class="pl-k">+</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>&lt;/div&gt;<span class="pl-pds">"</span></span>
+        }
+    }
+
+
+}</pre></div>
+
+<h1>
+<a id="scoring-overview" class="anchor" href="#scoring-overview" aria-hidden="true"><span class="octicon octicon-link"></span></a>Scoring overview</h1>
+
+<p>General principle is to be very flexible in finding a match, prefer return a loose match than nothing, but give higher score when we do not need the flexibility (more exact match)</p>
+
+<h2>
+<a id="scoring-an-item" class="anchor" href="#scoring-an-item" aria-hidden="true"><span class="octicon octicon-link"></span></a>Scoring an item</h2>
+
+<p>FuzzyMatch support quite complex items, query is compared to specified field.</p>
+
+<div class="highlight highlight-javascript"><pre>    book <span class="pl-k">=</span> {
+        Title<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>Cliché à Paris, The<span class="pl-pds">"</span></span>,
+        Year<span class="pl-k">:</span> <span class="pl-c1">1977</span>,
+        Author<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>John MiddleName Doe<span class="pl-pds">"</span></span>,
+        Keywords<span class="pl-k">:</span>[<span class="pl-s"><span class="pl-pds">"</span>Story<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Boy<span class="pl-pds">"</span></span>],
+        Reference<span class="pl-k">:</span>{ISSN<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>00-11-22<span class="pl-pds">"</span></span>, ARK<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>AA-BB-CC<span class="pl-pds">"</span></span>},
+        Available<span class="pl-k">:</span><span class="pl-c1">4</span>
+    }</pre></div>
+
+<h3>
+<a id="collect-information-and-normalize" class="anchor" href="#collect-information-and-normalize" aria-hidden="true"><span class="octicon octicon-link"></span></a>Collect information (And normalize)</h3>
+
+<div class="highlight highlight-javascript"><pre>keys <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>Title<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Author<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Year<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Keywords<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Reference.ISSN<span class="pl-pds">"</span></span>]</pre></div>
+
+<p>First thing we do is to build a list of field value, normalized to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
+We support path (things.this.that).</p>
+
+<div class="highlight highlight-javascript"><pre>Fields <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>cliche a paris, the<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>john middlename doe<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>1977<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>story<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>boy<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>00-11-22<span class="pl-pds">"</span></span>]</pre></div>
+
+<h3>
+<a id="field-priority" class="anchor" href="#field-priority" aria-hidden="true"><span class="octicon octicon-link"></span></a>Field priority</h3>
+
+<p>It often make send to give more weight to the title than first keyword,
+more weight to first keyword than second and so on.</p>
+
+<p>This is achieved using an exponentially decaying bonus. First item have twice the score then bonus decay to one. This is it give a marked difference between first and second item and not so much item 4th going on.</p>
+
+<p>Parameter (<code>d = bonus_position_decay</code>) control the decay:</p>
+
+<div class="highlight highlight-javascript"><pre>bonus <span class="pl-k">=</span> <span class="pl-c1">1.0</span><span class="pl-k">+</span>d<span class="pl-k">^</span>n</pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>0</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+<th>8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bonus (d=0.5)</td>
+<td>2.0</td>
+<td>1.5</td>
+<td>1.25</td>
+<td>1.13</td>
+<td>1.06</td>
+<td>1.03</td>
+<td>1.02</td>
+<td>1.01</td>
+<td>1.003</td>
+</tr>
+<tr>
+<td>Bonus (d=0.7071)</td>
+<td>2.0</td>
+<td>1.7</td>
+<td>1.5</td>
+<td>1.35</td>
+<td>1.25</td>
+<td>1.18</td>
+<td>1.13</td>
+<td>1.09</td>
+<td>1.063</td>
+</tr>
+</tbody>
+</table>
+
+<h3>
+<a id="free-word-order" class="anchor" href="#free-word-order" aria-hidden="true"><span class="octicon octicon-link"></span></a>Free word order</h3>
+
+<p>Often words keep their meaning even when out of order.
+Those will all match the author keyword:</p>
+
+<pre><code>John Doe
+Doe John
+John doe Midle
+</code></pre>
+
+<p>Another example where free word order is useful would be natural language query:
+Match:  <code>How to paint my wall ?</code> against <code>Wall painting 101</code></p>
+
+<p>Flip side of allowing free word order is preferring properly ordered words. This is done by giving a bonus of (<code>bonus_token_order</code>) each time two consecutive token in the query are in order in the match</p>
+
+<h3>
+<a id="multiple-field-matching" class="anchor" href="#multiple-field-matching" aria-hidden="true"><span class="octicon octicon-link"></span></a>Multiple field matching</h3>
+
+<blockquote>
+<p>cliche 1977</p>
+</blockquote>
+
+<p>This query would match in both <code>title</code> and <code>year</code> field.
+Flip side of allowing Multiple field matching is giving preference to words in the same field:</p>
+
+<blockquote>
+<p>"john doe", two word, same field</p>
+</blockquote>
+
+<p>Score is average of</p>
+
+<ol>
+<li>best score, every query token on the best field for the item</li>
+<li>best score, every query token on any field (their best field)</li>
+</ol>
+
+<h3>
+<a id="output-score-thresholding" class="anchor" href="#output-score-thresholding" aria-hidden="true"><span class="octicon octicon-link"></span></a>Output score thresholding</h3>
+
+<p>Default value are for suggestion as you type. In this case we prefer to show poor matches than nothing, match will improve as we type more.</p>
+
+<blockquote>
+<p>Parameter <code>thresh_include</code> control the minimum score to show</p>
+</blockquote>
+
+<p>We also want to limit choices to a good match or a few good matches if those exist. For example if the best score is twice as good as the next best one, it's obviously the candidate to show.</p>
+
+<blockquote>
+<p>Parameter <code>thresh_relative_to_best</code> control ratio of best match needed to be shown on the list</p>
+</blockquote>
+
+<p>Lastly if an item have multiple keyword, we might want to stop searching once we have found a good keyword. If a match is this good it'll be shown, no matter the best threshold.</p>
+
+<blockquote>
+<p>Parameter <code>field_good_enough</code> control the score needed to stop the search on this item. It also control forced inclusion, not matter best</p>
+</blockquote>
+
+<h3>
+<a id="output-map" class="anchor" href="#output-map" aria-hidden="true"><span class="octicon octicon-link"></span></a>Output map</h3>
+
+<h4>
+<a id="full-detail" class="anchor" href="#full-detail" aria-hidden="true"><span class="octicon octicon-link"></span></a>Full detail</h4>
+
+<p>Setting <code>outputmap=""</code> return the object as we use internally for sorting and scoring</p>
+
+<div class="highlight highlight-javascript"><pre>    candidate <span class="pl-k">=</span> {
+        score<span class="pl-k">:</span><span class="pl-c1">8.1</span>,
+        item<span class="pl-k">:</span>{}, <span class="pl-c">//original item</span>
+        match<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>1977<span class="pl-pds">"</span></span>,
+        matchIndex<span class="pl-k">:</span><span class="pl-c1">2</span>
+    }</pre></div>
+
+<h4>
+<a id="original-detail" class="anchor" href="#original-detail" aria-hidden="true"><span class="octicon octicon-link"></span></a>Original detail</h4>
+
+<p>Setting <code>outputmap="item"</code> give you back original item as given to the algorithm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)</p>
+
+<h4>
+<a id="property-of-an-original-item" class="anchor" href="#property-of-an-original-item" aria-hidden="true"><span class="octicon octicon-link"></span></a>Property of an original item</h4>
+
+<p>If you only need the id or title of the original item you can do it like that <code>outputmap="item.property"</code></p>
+
+<h2>
+<a id="scoring-a-token-in-a-auto-complete-friendly-manner" class="anchor" href="#scoring-a-token-in-a-auto-complete-friendly-manner" aria-hidden="true"><span class="octicon octicon-link"></span></a>Scoring a token (in a auto-complete friendly manner)</h2>
+
+<p>There's two main way to count string similarity one is to count the number of matches the other one is to count the number of error. Those refer to the length of the longest common sub-sequence and the edit distance problem. (Here we'll consider only the simple edit distance with only insertion/deletion )</p>
+
+<p>Match are show with "|" and error are show with "-"</p>
+
+<pre><code>sur-ve-y
+|||  | |
+surg-ery
+</code></pre>
+
+<p>match: 5, error: 3</p>
+
+<p>Both are related, but when comparing score of different length they can lead to different conclusions.</p>
+
+<pre><code>match("uni","university") : match 3, error 7
+match("uni","hi") : match 1, error 2
+</code></pre>
+
+<p>First pairing have more match, second pairing have less error.
+Most algorithm available use edit distance (error)
+yet somehow uni -&gt; university is a intuitive match.</p>
+
+<h3>
+<a id="looking-at-relative-errors" class="anchor" href="#looking-at-relative-errors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Looking at relative errors</h3>
+
+<p>One way to deal with different match length is to normalize error count by the length. Which one? Let's try to compare error count with length of second term...</p>
+
+<pre><code>match("uni","university") : 7 error/10 char = 0,7 error/char
+match("uni","hi") : 2 error/3 char = 0,666 error/char
+</code></pre>
+
+<p>Second match still have a lower relative error count.
+Even worse, the number of relative error are very close...</p>
+
+<pre><code>match("uni","universit") : 6 error 9 char, 0,666 error/char
+match("uni","universi") : 5 error 8 char, 0,625 error/char
+</code></pre>
+
+<p>At that point pairing decision is now reversed. Relative error is not a very stable score.</p>
+
+<h3>
+<a id="different-similarity-metric" class="anchor" href="#different-similarity-metric" aria-hidden="true"><span class="octicon octicon-link"></span></a>Different similarity metric</h3>
+
+<p><strong>Simple edit distance</strong> consider only count the number of insert / delete operation needed to go from string A to string B. For example type/typo are at a distance of 2: <code>del[e], ins[o]</code>.</p>
+
+<p><strong>Levenshtein edit distance</strong> add substitution.  For example type/typo are at a distance of 1: <code>subs[e,o]</code>. It improve over simple distance that wrong character error are not penalized twice. However it loose the ability to prefer transposition.</p>
+
+<p><strong>Damerau edit distance</strong> add transposition operation. This has make a metric that do not over penalize substitution, but also prefer word that had letter swapped (not that simple edit distance had that transposition preference too)</p>
+
+<p>Each time we add operation we have the opportunity to better model the error, but it add computation cost</p>
+
+<h4>
+<a id="edit-distance-lower-is-better" class="anchor" href="#edit-distance-lower-is-better" aria-hidden="true"><span class="octicon octicon-link"></span></a>Edit distance (lower is better)</h4>
+
+<table>
+<thead>
+<tr>
+<th align="left">Distance</th>
+<th>ed</th>
+<th>BULB / BOOB</th>
+<th>ed</th>
+<th>BULB / BLUB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">Simple</td>
+<td>4</td>
+<td>
+<code>B--ULB Ins[OO]</code><br> <code>BOO--B Del[UL]</code>
+</td>
+<td>2</td>
+<td>
+<code>B-ULB Ins[L]</code> <br> <code>BLU-B Del[L]</code>
+</td>
+</tr>
+<tr>
+<td align="left">Levenshtein</td>
+<td>2</td>
+<td>Subs[U,O]<br>Subs[L,O]</td>
+<td>2</td>
+<td>Subs[U,L]<br>Subs[L,U]</td>
+</tr>
+<tr>
+<td align="left">Damerau</td>
+<td>2</td>
+<td>Subs[U,O]<br>Subs[L,O]</td>
+<td>1</td>
+<td>Transpose[U,L]</td>
+</tr>
+</tbody>
+</table>
+
+<h4>
+<a id="matching-characters-lcs-higher-is-better" class="anchor" href="#matching-characters-lcs-higher-is-better" aria-hidden="true"><span class="octicon octicon-link"></span></a>Matching characters (LCS, higher is better)</h4>
+
+<table>
+<thead>
+<tr>
+<th align="left">Metric</th>
+<th>L</th>
+<th>BULB / BOOB</th>
+<th>L</th>
+<th>BULB / BLUB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">length of lcs</td>
+<td>2</td>
+<td>BB</td>
+<td>3</td>
+<td>BUB or BLB</td>
+</tr>
+</tbody>
+</table>
+
+<p>This metric is interesting for a number of reason. First we can remember the above case of <code>match("uni","university")</code> vs <code>match("uni","hi")</code> : intuitively we tend to count match rather than errors. Then this comparison show that counting match result in a scoring similar to Damerau-Levenshtein. No over-penalty on substitution and partial score for transposition.</p>
+
+<p>Possibly more interesting, length of LCS is fast to compute. Similar in complexity than simple edit distance. Indeed, if we set <code>m: length of string A</code>, <code>n: length of string B</code>, <code>ed: simple edit distance with unit cost</code>. <code>llcs:length of lcs</code>, we have:</p>
+
+<blockquote>
+<p>2*llcs = m + n - ed</p>
+</blockquote>
+
+<p>So basically we can learn from that than:</p>
+
+<ul>
+<li>If we have either llcs or simple edit distance we can get compute the other.</li>
+<li>The 2 in front of llcs is the reason we do not double penalize substitution.</li>
+</ul>
+
+<p>Please note that while <code>find the longest subsequence between A and B</code> and <code>find the shortest edit distance between A and B</code> are equivalent while comparing all of A versus all of B (Global match). They are not equivalent while comparing part of A versus part of B (Local match) or all of A versus part of B (Semi-Global, search a needle in a haystack). This explain that they are different research topic with different typical use.</p>
+
+<p>Furthermore, the resulting score are not equivalent while sorting a list of possible matches of varying length. This is the point we tried to make while comparing <code>"uni"</code> to <code>["hi","university"]</code>. The hypothesis behind this project is that counting matches is more intuitive and should better match user expectation in an interactive user interface.</p>
+
+<h5>
+<a id="but-is-there-a-catch-" class="anchor" href="#but-is-there-a-catch-" aria-hidden="true"><span class="octicon octicon-link"></span></a>But, is there a catch ?</h5>
+
+<p>Where simple edit distance can be overly severe, llcs can be overly optimistic.
+Matching 3 out of 4 character, or matching 3 out of 40 both give a score of 3.
+To some extend we want this (better to show something than nothing).
+But, we also want to give better score to better match, so we have to find to include back some information about error.</p>
+
+<h3>
+<a id="looking-for-a-score-relative-to-input-length" class="anchor" href="#looking-for-a-score-relative-to-input-length" aria-hidden="true"><span class="octicon octicon-link"></span></a>Looking for a score relative to input length</h3>
+
+<p>Let's consider those three cases:</p>
+
+<div class="highlight highlight-javascript"><pre>    <span class="pl-c1">match</span>(<span class="pl-s"><span class="pl-pds">"</span>uni<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>university<span class="pl-pds">"</span></span>)     <span class="pl-c">// case 1</span>
+    <span class="pl-c1">match</span>(<span class="pl-s"><span class="pl-pds">"</span>unicorn<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>university<span class="pl-pds">"</span></span>) <span class="pl-c">// case 2</span>
+    <span class="pl-c1">match</span>(<span class="pl-s"><span class="pl-pds">"</span>uni<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>ultra-nihilist<span class="pl-pds">"</span></span>) <span class="pl-c">// case 3</span></pre></div>
+
+<p>Let m be the number of matches</p>
+
+<ul>
+<li>If we compare m to second word length,
+
+<ul>
+<li>we cannot differentiate case 1 and 2. (3/10)</li>
+</ul>
+</li>
+<li>we compare m to first word length,
+
+<ul>
+<li>we cannot differentiate case 1 and 3. (3/3)</li>
+</ul>
+</li>
+<li>If we compare m to average of both length,
+
+<ul>
+<li> we cannot differentiate case 2 and 3 !! (3/8.5)</li>
+</ul>
+</li>
+</ul>
+
+<p>From that we learn that we want to include both length, but not in the form of arythmetic average of both. We need to do more research !</p>
+
+<h4>
+<a id="jarowinkler-distance" class="anchor" href="#jarowinkler-distance" aria-hidden="true"><span class="octicon octicon-link"></span></a>Jaro–Winkler distance</h4>
+
+<p>The <a href="https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance">Jaro–Winkler distance </a> is an heuristic algorithm for string matching. It's fast and perform well in different comparison.  In particular the <em>Jaro</em> distance use an approximation of LCS and then report it back to a score ranging from 0-1, combining length of both string. <em>Wrinkler</em> add the idea to give a bonus for common prefix, prefix bonus looks like something that fit well in a auto-complete scenario.</p>
+
+<p>Let's examine a jaro like score: let <code>m: be number of matches</code>, <code>sa: size of a</code>, <code>sb: size of b</code>.</p>
+
+<pre><code>score = (m/sa + m/sb) /2;
+</code></pre>
+
+<p>This has some interesting properties:</p>
+
+<ul>
+<li>better score if we match more of a.</li>
+<li>better score if we match more of b.</li>
+<li>minimum score is m/(2a) even if b is infinitely large.</li>
+</ul>
+
+<p>We do not have access to a number of transposition like <em>Jaro</em>, BUT lcs restrict matches to those that are in correct order, so we have some transposition effect built-in the value of llcs.</p>
+
+<h4>
+<a id="prefix" class="anchor" href="#prefix" aria-hidden="true"><span class="octicon octicon-link"></span></a>Prefix</h4>
+
+<p>There's some very efficient way to compute number of matches between two string, but most of them rely on simplifying the original problem. One such simplification is to only store the score and not the different possible path possible to reach that score.</p>
+
+<p>On the flip side, human most often input start of word rather than something in the middle. Prefix is a common sub-string of both inputs that start at first character. It's fast to compute, and allow to shrink the problem size for llcs computation. We'll add some bonus for common prefix controlled by <code>bonus_match_start</code>. That's the Winkler like part of our scoring algorithm.</p>
+
+<p>Compromise of using exact prefix is that a typo at the start of the word will stop  match, so it can induce a heavy penalty.</p>
+
+<h4>
+<a id="matching-multiple-keywords" class="anchor" href="#matching-multiple-keywords" aria-hidden="true"><span class="octicon octicon-link"></span></a>Matching multiple keywords</h4>
+
+<p>For matching a single token, we have a pretty interesting solution. However testing revealed that this scoring scheme gave disproportionate importance to small words. For example matching perfectly <code>of</code> or matching perfectly <code>Honorificabilitudinitatibus</code> both give a score of 1. However one is clearly easier to match than the other.</p>
+
+<p>We'll use the match length as a shortcut to specificity. (Doing this, we assume common words are short to use least amount of effort for a specific communication need).</p>
+
+<p>We multiply Jaro-like score by llcs and the score become:</p>
+
+<div class="highlight highlight-javascript"><pre>    score <span class="pl-k">=</span> <span class="pl-c1">0.5</span><span class="pl-k">*</span>m<span class="pl-k">*</span>(m/sa <span class="pl-k">+</span> m/sb)  <span class="pl-k">+</span> bonus<span class="pl-k">*</span>prefix;</pre></div>
+
+<p>Having m squared give the advantage of even better score for good matches and worse score for bad match. It lower the likelihood of multiple bad match out-score a single good match. A character matched in a good token is now worth more than a character matched in a bad token.</p>
+
+<h1>
+<a id="configuration" class="anchor" href="#configuration" aria-hidden="true"><span class="octicon octicon-link"></span></a>Configuration</h1>
+
+<table>
+<thead>
+<tr>
+<th align="left">Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">minimum_match</td>
+<td>1.0</td>
+<td>Minimum score to consider two token are not unrelated</td>
+</tr>
+<tr>
+<td align="left">thresh_include</td>
+<td>2.0</td>
+<td>To be a candidate score of item must be at least this</td>
+</tr>
+<tr>
+<td align="left">thresh_relative_to_best</td>
+<td>0.5</td>
+<td>and be at least this fraction of the best score</td>
+</tr>
+<tr>
+<td align="left">field_good_enough</td>
+<td>20</td>
+<td>If a field have this score stop searching other fields. (field score is before item related bonus)</td>
+</tr>
+<tr>
+<td align="left">bonus_match_start</td>
+<td>0.5</td>
+<td>Additional value per character in common prefix</td>
+</tr>
+<tr>
+<td align="left">bonus_token_order</td>
+<td>2.0</td>
+<td>Value of two token properly ordered</td>
+</tr>
+<tr>
+<td align="left">bonus_position_decay</td>
+<td>0.7</td>
+<td>Exponential decay for position bonus (smaller: more importance to first item)</td>
+</tr>
+<tr>
+<td align="left">score_round</td>
+<td>0.1</td>
+<td>Two item that have the same rounded score are sorted alphabetically</td>
+</tr>
+<tr>
+<td align="left">output_match_detail</td>
+<td>true</td>
+<td>if false output original item if true output {score:...item:...match:... matchIndex:...}</td>
+</tr>
+<tr>
+<td align="left">cache_fields</td>
+<td>true</td>
+<td>Perform the "collect" step only once and store result. Save computation time but use duplicate indexed fields</td>
+</tr>
+<tr>
+<td align="left">max_search_tokens</td>
+<td>10</td>
+<td>Because of free word order each search token add cost equivalent to one traversal additional tokens are lumped as a nth+1 token</td>
+</tr>
+<tr>
+<td align="left">max_candidates</td>
+<td>100</td>
+<td>Stop search after that many good candidate found Will trigger a recount to enforce relative_to_best rule</td>
+</tr>
+<tr>
+<td align="left">highlight_prefix</td>
+<td>false</td>
+<td>true: force prefix as part of highlight (false: minimum gap slower)</td>
+</tr>
+<tr>
+<td align="left">highlight_bridge_gap</td>
+<td>2</td>
+<td>display small gap as substitution set to size of gap 0 to disable</td>
+</tr>
+<tr>
+<td align="left">highlight_tk_max_size</td>
+<td>64</td>
+<td>max size of a token for highlight algorithm (it is BVMAXSIZE(31) for search)</td>
+</tr>
+<tr>
+<td align="left">highlight_before</td>
+<td>...</td>
+<td>tag to put before the highlight <br> <code>default: &lt;strong class="highlight"&gt;</code>
+</td>
+</tr>
+<tr>
+<td align="left">highlight_after</td>
+<td>...</td>
+<td>after the highlight <br> <code>default: &lt;/strong&gt;</code>
+</td>
+</tr>
+</tbody>
+</table>
+
+<h1>
+<a id="algorithms" class="anchor" href="#algorithms" aria-hidden="true"><span class="octicon octicon-link"></span></a>Algorithms</h1>
+
+<p>Main bitvector algorythm</p>
+
+<blockquote>
+<p>A fast and practical bit-vector algorithm for the longest common sub-sequence problem (Crochemore 2001)
+igm.univ-mlv.fr/~mac/REC/DOC/01-lcs_ipl.ps</p>
+
+<p>Bit-parallel LCS-length computation revisited (Hyyrö 2004)
+<a href="http://www.sis.uta.fi/%7Ehh56766/pubs/awoca04.pdf">http://www.sis.uta.fi/~hh56766/pubs/awoca04.pdf</a></p>
+</blockquote>
+
+<p>Large string algorithm (used when previous algorithm would require &gt;32 bit)</p>
+
+<blockquote>
+<p>An input sensitive online algorithm for LCS computation (Hyyrö 2009)
+<a href="http://www.stringology.org/event/2009/p18.html">http://www.stringology.org/event/2009/p18.html</a>
+<a href="http://www.stringology.org/event/2009/psc09p18_presentation.pdf">http://www.stringology.org/event/2009/psc09p18_presentation.pdf</a></p>
+</blockquote>
+
+<p>Pack multiple token into a single parallel computation</p>
+
+<blockquote>
+<p>Increased Bit-Parallelism
+for Approximate and Multiple String Matching (Hyyrö 2006)
+<a href="http://www.dcc.uchile.cl/%7Egnavarro/ps/jea06.pdf">http://www.dcc.uchile.cl/~gnavarro/ps/jea06.pdf</a></p>
+</blockquote>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
