@@ -59,7 +59,8 @@ var FuzzySearch = (function () {
         max_search_tokens: 10,           // Because of free word order, each search token add cost equivalent to one traversal
                                          // additional tokens are lumped as a nth+1 token
 
-        token_minimum_length: 2,          //Avoid processing very small words //TODO:Implement
+        token_minimum_length: 2,          //Avoid processing very small words
+                                          //Note that they still appear in single token "broken spacebar mode"
 
         tt_throttle: 150,                // Throttle ttadapter. Will try to learn actual time cost.
                                          // This is initial value. Set to 0 to disable.
@@ -326,6 +327,7 @@ var FuzzySearch = (function () {
             }
             else {
                 item_fields = FuzzySearch.generateFields(item, this.keys);
+                item_fields = _filterField(item_fields,"length",this.token_minimum_length);
                 item_fields = _map(item_fields,FuzzySearch.normalize);
                 if (this.cache_fields) item._fields_ = item_fields;
             }
@@ -337,6 +339,7 @@ var FuzzySearch = (function () {
 
             var normquery = FuzzySearch.normalize(querystring);
             var query_tokens = normquery.split(" ");
+            query_tokens = _filterField(query_tokens,"length",this.token_minimum_length);
 
             // lump tokens after max_search_tokens
             // if only one extra, it's already lumped
