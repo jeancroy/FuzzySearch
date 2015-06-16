@@ -47,8 +47,16 @@
 
 </style>
 
+<h1>FuzzySearch Demo</h1>
 Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. <br/>
-Show suggestion from <a href="books.json">this dataset</a>.  <br/>
+
+<h2>Dataset</h2>
+<form>
+    <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about 2kb</a> </label>
+    <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about 220kb</a> </label>
+</form>
+
+<h2>Using Twitter Typeahead</h2>
 
 <input id="demo-query" name="demo-query" autocomplete="off" type="text" width="500px">
 
@@ -56,30 +64,32 @@ Show suggestion from <a href="books.json">this dataset</a>.  <br/>
 <script>
 
 
-    jQuery.getJSON("books.json").then(function (response) {
-
-        var fuzzyhound = new FuzzySearch({
-            source: response,
-            keys: ["title", "author"]
-            //highlight_open_str: '<strong class="hh">'
-        });
+        var fuzzyhound = new FuzzySearch();
 
         $('#demo-query').typeahead({
-                    minLength: 2
+                    minLength: 2,
+                    highlight: false //we'll use FuzzySearch highlight instead
                 },
                 {
                     name: 'task',
+                    limit:6,
                     source: fuzzyhound,
                     display: "item.title",
                     templates: {
                         suggestion: function (suggestion) {
                             var item = suggestion.item;
                             var query = suggestion._query;
+                            var author = item.author || item.authors.author;
+
+                            if ( Object.prototype.toString.call(author) === '[object Array]' ) {
+                                author =  author.join(", ");
+                            }
+
                             return [
 
                                 "<div>",
-                                "<span class='title'>", fuzzyhound.highlight(query, item.title), "</span>|<span class='author'>", fuzzyhound.highlight(query, item.author), "</span><br>",
-                                "<span class='score'>( ", suggestion.match, " : ", suggestion.score.toFixed(2), " )</span><br><br>",
+                                "<span class='title'>\"", fuzzyhound.highlight(query, item.title), "</span>\" by <span class='author'>", fuzzyhound.highlight(query, author), "</span>",
+                                "<span class='score'>(&nbsp;", suggestion.score.toFixed(2), "&nbsp;)</span><br><br>",
                                 "</div>"
 
                             ].join("");
@@ -88,7 +98,16 @@ Show suggestion from <a href="books.json">this dataset</a>.  <br/>
                             return "<div class='typeahead-empty'> No result for \"" + context.query + "\"</div>"
                         },
                         footer: function(context){
-                            return "<div class='typeahead-footer'> Search took " + fuzzyhound.search_time.toFixed(3) + " ms</div>"
+                            var render_end = performance.now();
+                            var str =  "<div class='typeahead-footer'> " +
+                                    "<br>"+
+                                    "Search took <strong>" + fuzzyhound.search_time.toFixed(3) + " ms</strong><br>" +
+                                    "Total (search+highlight+render):  <strong>" + (render_end - fuzzyhound.start_time).toFixed(3) + " ms</strong><br>" +
+                                    "Source contain " + fuzzyhound.source.length + " Items<br>" +
+                                    "Showing the bests out of " + fuzzyhound.results.length + " positive candidate<br>" +
+                                    "</div>";
+                            return str;
+
                         }
                     }
 
@@ -98,7 +117,40 @@ Show suggestion from <a href="books.json">this dataset</a>.  <br/>
                 });
 
 
-    });
+        //Setup dataset switch
+        $.ajaxSetup({cache: true});
+
+        function setsource(url,keys){
+            $.getJSON(url).then(function (response) {
+                    fuzzyhound.set({
+                        source: response,
+                        keys: keys
+                    })
+                });
+        }
+
+        //Load small dataset by default
+        setsource("books.json",["title", "author"]);
+
+        $('input[name=source]:radio').change(function(){
+            switch(this.value){
+
+                case "large":
+                    setsource("books_large.json",["title", "authors.author"]);
+                    break;
+
+                case "small":
+                default:
+                    setsource("books.json",["title", "author"]);
+                    break;
+            }
+
+            el = $('#demo-query');
+            el.typeahead('val', el.typeahead('val') );
+
+        });
+
+
 
 
 
