@@ -37,51 +37,80 @@ var FuzzySearch = (function () {
 
     var _defaults = {
 
+        //
+        //  Scoring, include in result
+        //
+
         minimum_match: 1.0,               // Minimum score to consider two token are not unrelated
         thresh_include: 2.0,              // To be a candidate, score of item must be at least this
         thresh_relative_to_best: 0.5,     // and be at least this fraction of the best score
         field_good_enough: 20,            // If a field have this score, stop searching other fields. (field score is before item related bonus)
 
+        //
+        //  Scoring, bonus
+        //
+
         bonus_match_start: 0.5,          // Additional value per character in common prefix
         bonus_token_order: 2.0,          // Value of two token properly ordered
         bonus_position_decay: 0.7,       // Exponential decay for position bonus (smaller : more importance to first item)
 
+        free_word_order:true,            // if true, split query&field in token, allow to match in different order
+                                         // if false, bypass at least half the computation cost, very fast
+                                         // also disable different token that score different field, because no more token!!
+
+        //
+        //  Output sort & transform
+        //
+
         score_round: 0.1,                // Two item that have the same rounded score are sorted alphabetically
-        recover_match: false,             // Recover original spelling of field that has matched (before normalisation)
-
-        output_limit:0,                  // Return up to N result, 0 to disable
-
+        recover_match: false,            // Recover original spelling of field that has matched (before normalisation)
+        output_limit: 0,                 // Return up to N result, 0 to disable
         output_map: "",                  // Transform the output.
                                          // output_map="" return inner working object {score:...,item:...,match:..., matchIndex:...}
                                          // output_map="item" return original object. output_map="item.this.that" output a field of object.
 
-        cache_fields: true,              // Collect values and normalise only once.
-                                         // This will duplicate indexed field in memory.
+        //
+        //  Tokens options
+        //
+
+        token_query_min_length: 2,       // Avoid processing very small words, include greater or equal, in query
+        token_field_min_length: 3,       // include greater or equal, in item field
+        token_max_length: 64,            // Shorten large token to give more predictive performance.
 
         max_search_tokens: 10,           // Because of free word order, each search token add cost equivalent to one traversal
                                          // additional tokens are lumped as a nth+1 token
 
-        token_minimum_length: 2,          //Avoid processing very small words
-                                          //Note that they still appear in single token "broken spacebar mode"
+        cache_fields: true,              // Collect values and normalise only once.
+                                         // This will duplicate indexed field in memory.
 
-        interactive_debounce: 150,       // Debounce ttadapter or other live autocomplete.
-                                         // Will try to learn actual time cost.
-                                         // This is initial value. Set to 0 to disable.
+        //
+        //  Interractive - suggest as you type.
+        //  Avoid doing search that will be discarded without being displayed
+        //  This also help prevent lag/ temp freeze
+        //
 
-        interactive_mult: 1.2,           //Overhead for variability and to allow other things to happens (like redraw, highlight ).
+        interactive_debounce: 150,   // This is initial value. Will try to learn actual time cost. Set to 0 to disable.
+        interactive_mult: 1.2,       // Overhead for variability and to allow other things to happens (like redraw, highlight ).
+        interactive_burst: 3,        // Allow short burst, prevent flicker due to debounce supress
 
-        interactive_burst: 3,            //Allow short burst, prevent flicker due to debounce supress
+
+        //
+        //  Highlight
+        //
 
         highlight_prefix: false,         // true: force prefix as part of highlight, (false: minimum gap, slower)
         highlight_bridge_gap: 2,         // display small gap as substitution, set to size of gap, 0 to disable
-        highlight_tk_max_size: 64,       // max size of a token for highlight algorithm (it is BV_MAX_SIZE(31) for search)
+        highlight_before: '<strong class="highlight">',  //tag to put before/after the highlight
+        highlight_after: '</strong>',
 
-        //tag to put before/after the highlight
-        highlight_before: '<strong class="highlight">',
-        highlight_after:  '</strong>',
+        //
+        //  Default empty source / keys.
+        //  Usefull while waiting for ajax download
+        //
 
-        source: [], //default empty source.
-        keys: [""]  //default empty keys.
+        source: [],
+        keys: [""],
+        results: []
 
     };
 
@@ -95,65 +124,48 @@ var FuzzySearch = (function () {
     var BV_MAX_SIZE = 31;
 
     function FuzzySearch(options) {
-        if(options===undefined) options = {};
-        FuzzySearch.setup(this,_defaults,options)
+        if (options === undefined) options = {};
+        FuzzySearch.setup(this, _defaults, options)
     }
 
     FuzzySearch.defaultOptions = _defaults;
 
-    FuzzySearch.setup = function(item, defaults ,options){
+    FuzzySearch.setup = function (item, defaults, options) {
 
-        var key;
-
-        //Config:
-        // copy key of options that are also in default
-        // also add keys of default
-        for (key in defaults) {
+        // Copy key of options that are also in default
+        // If key not in options, add from defaults.
+        for (var key in defaults) {
             if (defaults.hasOwnProperty(key)) {
-                item[key] = (key in options)? options[key] : defaults[key];
+                item[key] = (key in options) ? options[key] : defaults[key];
             }
         }
 
         //statistic about last search
         item.start_time = 0;
         item.search_time = 0;
-        item.results = [];
 
     };
 
 
     //Helper on array
-    function _map(array, transform) {
+    function _map(array, transform, context) {
         var i = -1;
         var n = array.length;
         var out = new Array(n);
 
         while (++i < n) {
-            out[i] = transform(array[i], i, array);
+            out[i] = transform.call(context, array[i], i, array);
         }
         return out;
     }
 
-    function _filterField(array, field, minval) {
-        var i = -1,j = -1;
-        var n = array.length;
-        var out = [];
-
-        while (++i < n) {
-            var obj = array[i];
-            if (obj[field] >= minval) {
-                out[++j] = obj;
-            }
-        }
-        return out;
-    }
 
     FuzzySearch.prototype = {
 
         //Allow to overwrite some options, keeping previous intact.
-        set: function(options){
-            if(options===undefined) options = {};
-            FuzzySearch.setup(this,this,options);
+        set: function (options) {
+            if (options === undefined) options = {};
+            FuzzySearch.setup(this, this, options);
         },
 
         search: function (querystring) {
@@ -171,7 +183,13 @@ var FuzzySearch = (function () {
             var results = [];
 
             var source_index = -1, source_len = this.source.length;
-            while ( ++source_index < source_len) {
+
+            var opt_bpd = this.bonus_position_decay;
+            var opt_fge = this.field_good_enough;
+            var opt_trb = this.thresh_relative_to_best;
+            var opt_free = this.free_word_order;
+
+            while (++source_index < source_len) {
 
                 var item_score = 0;
                 var matched_field_index = -1;
@@ -186,39 +204,48 @@ var FuzzySearch = (function () {
                 var item_fields = this._getFields(item);
 
                 var field_index = -1, fields_len = item_fields.length;
-                while ( ++field_index < fields_len) {
+                while (++field_index < fields_len) {
 
-                    var field_score = this._scoreField(item_fields[field_index], query);
+                    var field_score;
+                    if(opt_free)
+                        field_score = this._scoreField(item_fields[field_index], query);
+                    else
+                        field_score = FuzzySearch.score_map(query.normalized,item_fields[field_index].join(" "),query.fused_token,this.bonus_match_start);
+
                     field_score *= (1.0 + position_bonus);
-                    position_bonus *= this.bonus_position_decay;
+                    position_bonus *= opt_bpd;
 
                     if (field_score > item_score) {
                         item_score = field_score;
                         matched_field_index = field_index;
 
-                        if(field_score>this.field_good_enough) break;
+                        if (field_score > opt_fge) break;
                     }
 
                 }
 
-                // Mix best field score (all keyword in one field)
-                // with best keyword score (all keyword any field)
-                var query_score = 0;
-                var score_per_token = query.tokens_score;
-                var i=-1, nbtokens = score_per_token.length;
-                while (++i < nbtokens) {
-                    query_score += score_per_token[i]
-                }
+                if(opt_free) {
 
-                //individual tokens or fused togheter ?
-                if( query.fused_score > query_score) query_score = query.fused_score;
-                item_score = 0.5 * item_score + 0.5 * query_score;
+                    // Mix best field score (all keyword in one field)
+                    // with best keyword score (all keyword any field)
+                    var query_score = 0;
+                    var score_per_token = query.tokens_score;
+                    var i = -1, nbtokens = score_per_token.length;
+                    while (++i < nbtokens) {
+                        query_score += score_per_token[i]
+                    }
+
+                    //individual tokens or fused togheter ?
+                    if (query.fused_score > query_score) query_score = query.fused_score;
+                    item_score = 0.5 * item_score + 0.5 * query_score;
+
+                }
 
                 // get stat of the best result so far
                 // this control inclusion of result in final list
                 if (item_score > best_item_score) {
                     best_item_score = item_score;
-                    var tmp = item_score * this.thresh_relative_to_best;
+                    var tmp = item_score * opt_trb;
                     if (tmp > thresh_include) thresh_include = tmp;
                 }
 
@@ -231,7 +258,7 @@ var FuzzySearch = (function () {
             }
 
             //keep only results that are good enough compared to best
-            results = _filterField(results,"score",thresh_include);
+            results = FuzzySearch.filterGT(results, "score", thresh_include);
 
             // sort by decreasing order of score
             // equal rounded score: alphabetical order
@@ -245,7 +272,7 @@ var FuzzySearch = (function () {
             }
 
             var time_end = clock.now();
-            this.search_time = time_end-time_start;
+            this.search_time = time_end - time_start;
             this.results = results;
 
             return results
@@ -257,6 +284,7 @@ var FuzzySearch = (function () {
             var query_bitvectors = query.bitvectors;
             var best_score_any_field = query.tokens_score;
             var bonus_match_start = this.bonus_match_start;
+            var bonus_token_order = this.bonus_token_order;
             var minimum_match = this.minimum_match;
 
             var field_score = 0;
@@ -282,12 +310,12 @@ var FuzzySearch = (function () {
 
                 //for each search token, find the best matching item token
                 var tok_index = -1;
-                while ( ++tok_index < field_tokens_len) {
+                while (++tok_index < field_tokens_len) {
 
                     var item_tk = field_tokens[tok_index];
                     //if (!item_tk.length) continue;
 
-                    var test_score = FuzzySearch.score_map(query_tk, item_tk, query_tk_bv,bonus_match_start);
+                    var test_score = FuzzySearch.score_map(query_tk, item_tk, query_tk_bv, bonus_match_start);
 
                     //each query token is matched against it's best field token
                     if (test_score > best_score_this_field) {
@@ -305,7 +333,7 @@ var FuzzySearch = (function () {
                 // if search token are ordered inside subject give a bonus
                 // only consider non empty match for bonus
                 if (best_score_this_field > minimum_match) {
-                    if (current_match_pos > last_match_pos)  best_score_this_field += this.bonus_token_order;
+                    if (current_match_pos > last_match_pos)  best_score_this_field += bonus_token_order;
                     last_match_pos = current_match_pos;
                 }
 
@@ -335,19 +363,22 @@ var FuzzySearch = (function () {
             }
             else {
                 item_fields = FuzzySearch.generateFields(item, this.keys);
-                item_fields = _filterField(item_fields,"length",this.token_minimum_length);
-                item_fields = _map(item_fields, function(a){ return FuzzySearch.normalize(a).split(" ") });
+                item_fields = _map(item_fields, FuzzySearch.normalize);
+                item_fields = _map(item_fields, this._tokenize, this);
                 if (this.cache_fields) item._fields_ = item_fields;
             }
 
             return item_fields;
         },
 
+        _tokenize: function (str) {
+            return FuzzySearch.filterSize(str.split(" "), this.token_field_min_length, this.token_max_length);
+        },
+
         _prepQuery: function (querystring) {
 
             var normquery = FuzzySearch.normalize(querystring);
-            var query_tokens = normquery.split(" ");
-            query_tokens = _filterField(query_tokens,"length",this.token_minimum_length);
+            var query_tokens = FuzzySearch.filterSize(normquery.split(" "), this.token_query_min_length, this.token_max_length);
 
             // lump tokens after max_search_tokens
             // if only one extra, it's already lumped
@@ -360,13 +391,13 @@ var FuzzySearch = (function () {
             //reset best score
             var score_per_token = [];
             for (var i = 0; i < query_tokens.length; i++) {
-                score_per_token[i] = 0
+                score_per_token[i] = -1;
             }
 
             return {
                 normalized: normquery,
                 tokens: query_tokens,
-                bitvectors: _map(query_tokens,FuzzySearch.bitVector),
+                bitvectors: _map(query_tokens, FuzzySearch.bitVector),
                 tokens_score: score_per_token,
                 fused_score: 0,
                 fused_token: FuzzySearch.bitVector(normquery)
@@ -400,9 +431,9 @@ var FuzzySearch = (function () {
 
         },
 
-        //Get a debounced version of search method with callbacks
+        //Get a Debounced version of search method with callbacks
 
-        getInteractive: function(){
+        getInteractive: function () {
 
             var self = this;
             var wait = this.interactive_debounce;
@@ -410,19 +441,21 @@ var FuzzySearch = (function () {
             var burst = this.interactive_burst;
 
             // Debounce off
-            if(wait === 0){
-                return (function (query, immediate_cb, suppress_cb, finally_cb ) { return immediate_cb(self.search(query)) })
+            if (wait === 0) {
+                return (function (query, immediate_cb, suppress_cb, finally_cb) {
+                    return immediate_cb(self.search(query))
+                })
             }
 
             // Debounce
-             var clock = (performance && performance.now) ? performance : Date;
+            var clock = (performance && performance.now) ? performance : Date;
             var timeout, cache;
-            var count= 0, supressed=false;
+            var count = 0, supressed = false;
 
-            var later = function(query,callback) {
+            var later = function (query, callback) {
                 timeout = null;
-                if(supressed){
-                    cache =  self.search(query);
+                if (supressed) {
+                    cache = self.search(query);
                     callback(cache);
                     console.log("debounce-end");
                 }
@@ -433,35 +466,25 @@ var FuzzySearch = (function () {
             return function (query, immediate_cb, suppress_cb, finally_cb) {
 
                 clearTimeout(timeout);
-                timeout = setTimeout(later, wait,query, finally_cb);
+                timeout = setTimeout(later, wait, query, finally_cb);
 
-                if(++count<burst){
+                if (++count < burst) {
 
                     supressed = false;
-
-                    var before  =  clock.now();
+                    var before = clock.now();
                     cache = self.search(query);
                     var ret = immediate_cb(cache);
                     var now = clock.now();
 
-                    //consume
-                    // async_callback([]);
-
-                    //try to learn  typical time (modified by mult factor);
-                    wait = 0.5*wait + 0.5*mult*(now-before);
+                    //try to learn  typical time (time mult factor);
+                    wait = 0.5 * wait + 0.5 * mult * (now - before);
                     return ret;
 
-                }else{
-
-                    console.log("debounce-supress");
+                } else {
                     supressed = true;
                     return suppress_cb(cache);
-
                 }
-
             }
-
-
 
         },
 
@@ -469,10 +492,9 @@ var FuzzySearch = (function () {
         __ttAdapter: function ttAdapter() {
 
             var debounced = this.getInteractive();
-            var noop = function(a){};
-
-            return function(query,sync,async){
-                debounced(query,sync,noop,async);
+            var noop = function (a) { };
+            return function (query, sync, async) {
+                debounced(query, sync, noop, async);
             }
 
         }
@@ -491,16 +513,15 @@ var FuzzySearch = (function () {
     }
 
     FuzzySearch.normalize = function (str) {
-        if(!str)return "";
+        if (!str)return "";
         return str.toLowerCase().replace(/\s+/g, " ").replace(/[^\u0000-\u007E]/g, function (a) {
             return diacriticsMap[a] || a;
         });
     };
 
-
     FuzzySearch.generateFields = function (obj, fieldlist) {
 
-        if(!fieldlist.length) return [obj.toString()];
+        if (!fieldlist.length) return [obj.toString()];
 
         var indexed_fields = [];
         for (var i = 0; i < fieldlist.length; i++) {
@@ -512,7 +533,7 @@ var FuzzySearch = (function () {
 
     FuzzySearch.getField = function (obj, field) {
 
-        if(!field.length) return obj.toString();
+        if (!field.length) return obj.toString();
 
         var indexed_fields = [];
         FuzzySearch._collectValues(obj, field.split("."), indexed_fields, 0);
@@ -524,18 +545,18 @@ var FuzzySearch = (function () {
 
         var key, i;
         var nb_level = parts.length;
-        while( level < nb_level){
+        while (level < nb_level) {
 
             key = parts[level];
-            if(key === "*") break;
+            if (key === "*") break;
             obj = obj[key];
-            if(obj === undefined) return list;
+            if (obj === undefined) return list;
             level++
 
         }
 
         var type = Object.prototype.toString.call(obj);
-        var isArray  = ( type === '[object Array]'  );
+        var isArray = ( type === '[object Array]'  );
         var isObject = ( type === '[object Object]' );
 
 
@@ -547,9 +568,9 @@ var FuzzySearch = (function () {
                 }
             }
 
-            else if(isObject){
-                for (key in obj){
-                    if(obj.hasOwnProperty(key)){
+            else if (isObject) {
+                for (key in obj) {
+                    if (obj.hasOwnProperty(key)) {
                         list.push(obj[key].toString())
                     }
                 }
@@ -559,17 +580,17 @@ var FuzzySearch = (function () {
 
         }
 
-        else if( key === "*" ) {
+        else if (key === "*") {
 
             level++;
-            if (isArray){
+            if (isArray) {
                 for (i = 0; i < obj.length; i++) {
                     FuzzySearch._collectValues(obj[i], parts, list, level);
                 }
             }
-            else if(isObject){
-                for (key in obj){
-                    if(obj.hasOwnProperty(key)){
+            else if (isObject) {
+                for (key in obj) {
+                    if (obj.hasOwnProperty(key)) {
                         FuzzySearch._collectValues(obj[key], parts, list, level);
                     }
                 }
@@ -582,37 +603,54 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.mapField = function(source, path, limit){
+    FuzzySearch.filterSize = function (array, minSize, maxSize) {
+        var i = -1, j = -1;
+        var n = array.length;
+        var out = [];
+
+        while (++i < n) {
+            var str = array[i];
+            if (str.length >= minSize) {
+                if (str.length < maxSize)
+                    out[++j] = str;
+                else
+                    out[++j] = str.substr(0, maxSize)
+            }
+        }
+        return out;
+    };
+
+    FuzzySearch.mapField = function (source, path, limit) {
 
         var n = source.length;
-        if (limit > 0 && limit < n ) n = limit;
-        if (path=="") return source.slice(0,n);
+        if (limit > 0 && limit < n) n = limit;
+        if (path == "") return source.slice(0, n);
 
         var out = new Array(n);
         var i = -1;
         var obj;
 
-        if( path.indexOf(".") === -1){
+        if (path.indexOf(".") === -1) {
 
             //fast case no inner loop
-            while (++ i < n) {
+            while (++i < n) {
                 obj = source[i];
-                if(path in obj) out[i] = obj[path];
+                if (path in obj) out[i] = obj[path];
             }
 
-        }else{
+        } else {
 
             //genaral case
             var parts = path.split(".");
             var nb_level = parts.length;
-            obj =  source[i];
+            obj = source[i];
 
-            while (++ i < n) {
+            while (++i < n) {
                 var level = -1;
-                while( ++level < nb_level){
+                while (++level < nb_level) {
                     var key = parts[level];
                     obj = obj[key];
-                    if(obj === undefined) break;
+                    if (obj === undefined) break;
                 }
 
                 out[i] = obj;
@@ -620,6 +658,22 @@ var FuzzySearch = (function () {
 
         }
 
+    };
+
+    FuzzySearch.filterGT = function (array, field, compareto) {
+
+        var i = -1, j = -1;
+        var n = array.length;
+        var out = [], obj;
+
+        while (++i < n) {
+            obj = array[i];
+            if (obj[field] >= compareto) {
+                out[++j] = obj;
+            }
+        }
+
+        return out;
     };
 
 
@@ -648,7 +702,7 @@ var FuzzySearch = (function () {
     //
 
 
-    FuzzySearch.prototype.score = function(a, b){
+    FuzzySearch.prototype.score = function (a, b) {
         return FuzzySearch.score(a, b, this)
     };
 
@@ -657,7 +711,9 @@ var FuzzySearch = (function () {
         if (options === undefined) options = _defaults;
 
         //do as much work as possible in as bit-parallel computation
-        if( b.length > a.length && b.length < BV_MAX_SIZE){var tmp=a; a=b; b=tmp;}
+        if (b.length > a.length && b.length < BV_MAX_SIZE) {
+            var tmp = a; a = b; b = tmp;
+        }
 
         var aMap = FuzzySearch.bitVector(a);
         return FuzzySearch.score_map(a, b, aMap, options.bonus_match_start);
@@ -680,20 +736,22 @@ var FuzzySearch = (function () {
 
         //common prefix is part of lcs
         var prefix = 0;
-        if(a === b) prefix = k; //speedup equality
-        else{ for (i = 0; i < k && (a[i] === b[i]); i++) prefix++;}
+        if (a === b) prefix = k; //speedup equality
+        else {
+            for (i = 0; i < k && (a[i] === b[i]); i++) prefix++;
+        }
 
         //shortest string consumed
         if (prefix === k) {
             lcs_len = prefix;
-            return sz_score * lcs_len * lcs_len + bonus_prefix*prefix;
+            return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
         }
 
         //alternative algorithm for large string
         //need to keep this condition in sync with bitvector
-        if(m > BV_MAX_SIZE){
-            lcs_len = FuzzySearch.llcs_large(a,b,aMap,prefix);
-            return sz_score * lcs_len * lcs_len + bonus_prefix*prefix;
+        if (m > BV_MAX_SIZE) {
+            lcs_len = FuzzySearch.llcs_large(a, b, aMap, prefix);
+            return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
         }
 
         m -= prefix;
@@ -704,15 +762,20 @@ var FuzzySearch = (function () {
             // bit shift operator coerce undefined to 0
             // tested in jsperf: not testing if(key in map)
             // make this calculation twice as fast
-            M = aMap[b[j]] >> prefix;
+            M = aMap[b[j]];
             U = S & M;
             S = (S + U) | (S - U); // Hyyrö, 2004 S=V'=~V
 
         }
 
+
+        // Remove match already accounted in prefix region.
+        mask &= ~( ( 1 << prefix ) - 1 );
+
         // lcs_len is number of 0 in S (at position lower than m)
         // inverse S, mask it, then do "popcount" operation on 32bit
         S = ~S & mask;
+
         S = S - ((S >> 1) & 0x55555555);
         S = (S & 0x33333333) + ((S >> 2) & 0x33333333);
         lcs_len = (((S + (S >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
@@ -721,10 +784,9 @@ var FuzzySearch = (function () {
         //while (S){ S &= S - 1 ; lcs_len++ }
 
         lcs_len += prefix;
-        return sz_score * lcs_len * lcs_len + bonus_prefix *prefix;
+        return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
 
     };
-
 
 
     //
@@ -737,7 +799,7 @@ var FuzzySearch = (function () {
         var len = token.length;
 
         //Large string, fallback to position by position algorithm
-        if(len > BV_MAX_SIZE) return FuzzySearch.posVector(token);
+        if (len > BV_MAX_SIZE) return FuzzySearch.posVector(token);
 
         //bit or "|=" operator coerce undefined to 0
         for (i = 0; i < len; i++) {
@@ -752,21 +814,21 @@ var FuzzySearch = (function () {
     // instead of a bit in an integer
     //
 
-    FuzzySearch.posVector = function(pattern){
+    FuzzySearch.posVector = function (pattern) {
 
         var m = pattern.length;
         var i, c, v;
         var map = {};
 
-        for(i=0;i<m;i++){
+        for (i = 0; i < m; i++) {
             c = pattern[i];
             v = map[c];
-            if( v === undefined ) map[c] = [i];
+            if (v === undefined) map[c] = [i];
             else v.push(i);
         }
 
-        for(c in map){
-            if(map.hasOwnProperty(c)){
+        for (c in map) {
+            if (map.hasOwnProperty(c)) {
                 map[c].push(Infinity);
             }
         }
@@ -846,19 +908,19 @@ var FuzzySearch = (function () {
         // To avoid dealing with to many edge case we place
         // a special token at start & end of list
         var last_line, current_line, line_index, last_end, block_end;
-        if(prefix === undefined) prefix = 0;
+        if (prefix === undefined) prefix = 0;
 
-        if(prefix)
-            last_line = [ [0,prefix], [ Infinity, Infinity] ] ;
+        if (prefix)
+            last_line = [[0, prefix], [Infinity, Infinity]];
         else
-            last_line =  [[ Infinity, Infinity]];
+            last_line = [[Infinity, Infinity]];
 
         var lcs_len = prefix;
 
         var match_list, match_index;
         var block, block_index, block_size;
 
-        var n = b.length,j;
+        var n = b.length, j;
         for (j = prefix; j < n; j++) {
 
             //Each line we process a single character of b
@@ -878,7 +940,7 @@ var FuzzySearch = (function () {
             block_index = -1;
 
             var nblock = last_line.length;
-            while( ++block_index < nblock){
+            while (++block_index < nblock) {
 
                 //Place cursor just after last block
                 last_end = block_end;
@@ -887,7 +949,7 @@ var FuzzySearch = (function () {
                 block = last_line[block_index];
                 block_start = block[0]; //Encode block as [s,e[
                 block_end = block[1]; //End is position of char that follow last.
-                block_size =  block_end-block_start;
+                block_size = block_end - block_start;
 
                 //get next match from list of matches
                 while (match_pos < last_end) {
@@ -898,7 +960,7 @@ var FuzzySearch = (function () {
                 // a) no match between two block
                 // b) block happens after last match (so match_pos=Infinity).
                 //    At the last block, this will append closing "sentinel" to line
-                if (block_start <= match_pos){
+                if (block_start <= match_pos) {
                     current_line[++line_index] = block;
                     continue;
                 }
@@ -916,21 +978,21 @@ var FuzzySearch = (function () {
 
                     //Increase need it's own block ( step a.i)
                     //try to reuse block that will get deleted.
-                    if(block_size === 1) {
+                    if (block_size === 1) {
                         //Can we reuse next block ?
                         block[0] = match_pos;
                         block[1] = match_pos + 1;
                         current_line[++line_index] = block;
-                    }else{
+                    } else {
                         //start a new block
-                        current_line[++line_index] = [match_pos, match_pos+1];
+                        current_line[++line_index] = [match_pos, match_pos + 1];
                     }
 
                 }
 
                 // if not empty, append next block to current line (step a.iii)
                 // (this condition reject "sentinel", it'll get added just after the for loop)
-                if ( block_size> 1  ) {
+                if (block_size > 1) {
                     block[0]++; // Move start by one
                     current_line[++line_index] = block;
                 }
@@ -940,7 +1002,7 @@ var FuzzySearch = (function () {
             // If the line finish with a match:
             //  a) llcs at end of this line is one greater than last line, increase score
             //  b) we still need to append sentinel
-            if (block_start > match_pos){
+            if (block_start > match_pos) {
                 current_line[++line_index] = block;
                 lcs_len++
             }
@@ -957,19 +1019,20 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.prototype.highlight = function ( b) {
+    FuzzySearch.prototype.highlight = function (b) {
         return FuzzySearch.highlight(this.query.normalized, b, this)
     };
 
     FuzzySearch.highlight = function (a, b, options) {
 
-        if(options === undefined) options = _defaults;
-        if(!b) return "";
+        if (options === undefined) options = _defaults;
+        if (!b) return "";
 
         //var time_start = performance.now();
 
         var open_string = options.highlight_before;
         var close_string = options.highlight_after;
+        var opt_free = options.free_word_order;
 
         var aa = FuzzySearch.normalize(a);
         var bb = FuzzySearch.normalize(b);
@@ -986,25 +1049,26 @@ var FuzzySearch = (function () {
             a_tokens.push(extra);
         }
 
-        var match_list = [];
-        var match_score = FuzzySearch.matchTokens(b_tokens, a_tokens, match_list, options);
         var strArr = [];
+        var match_list = [];
+        var fused_score, match_score;
 
-        //shortcut no match
-        if (match_score === 0) return b;
+        if(opt_free){
+            match_score = FuzzySearch.matchTokens(b_tokens, a_tokens, match_list, options);
+            if (match_score === 0) return b; //shortcut no match
+            //Test "spacebar is broken" no token match
+            fused_score = FuzzySearch.score(aa, bb, options);
+        }
 
-        //Test "spacebar is broken" no token match
-        var fused_score = FuzzySearch.score(aa, bb, options);
-        if (fused_score > match_score) {
-            //undo tokens
-            a_tokens = [aa];
+        if (!opt_free || fused_score > match_score) {
+            a_tokens = [aa]; //everything in a single token
             b_tokens = [bb];
             disp_tokens = [disp_tokens.join(" ")];
             match_list = [0];
         }
 
-        var nbtok = disp_tokens.length, j=-1;
-        while ( ++j < nbtok) {
+        var nbtok = disp_tokens.length, j = -1;
+        while (++j < nbtok) {
 
             var i = match_list[j];
 
@@ -1029,7 +1093,7 @@ var FuzzySearch = (function () {
                 var s = start_positions[k];
                 var e = end_positions[k];
                 if (s > curr) strArr.push(td.substring(curr, s));
-                strArr.push( open_string + td.substring(s, e) + close_string);
+                strArr.push(open_string + td.substring(s, e) + close_string);
                 curr = e;
 
             }
@@ -1063,7 +1127,7 @@ var FuzzySearch = (function () {
 
     FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 
-        if(options===undefined) options = _defaults;
+        if (options === undefined) options = _defaults;
 
         var wm = 1.0;   // score to making a match
         var wo = -0.1;  // score to open a gap
@@ -1074,7 +1138,7 @@ var FuzzySearch = (function () {
         var LEFT = 2;
         var DIAGONAL = 3;
 
-        var msz = options.highlight_tk_max_size;
+        var msz = options.token_max_length;
         var m = Math.min(a.length + 1, msz);
         var n = Math.min(b.length + 1, msz);
 
@@ -1086,7 +1150,7 @@ var FuzzySearch = (function () {
         var k = m < n ? m : n;
         var prefixlen = 0;
 
-        if(a===b){
+        if (a === b) {
             //speedup equality
             prefixlen = m;
             m = 0;
@@ -1314,10 +1378,9 @@ var FuzzySearch = (function () {
     //
 
 
-
     FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options) {
 
-        if(options===undefined) options = _defaults;
+        if (options === undefined) options = _defaults;
 
         var minimum_match = options.minimum_match;
         var bonus_match_start = options.bonus_match_start;
@@ -1336,15 +1399,19 @@ var FuzzySearch = (function () {
         //
 
         var flip = false;
-        if(m>1 && n>1 && m-n>10){
+        if (m > 1 && n > 1 && m - n > 10) {
             //switch a, b
-            var tmp = a_tokens; a_tokens = b_tokens; b_tokens = tmp;
-            i = m; m = n;  n = i;
+            var tmp = a_tokens;
+            a_tokens = b_tokens;
+            b_tokens = tmp;
+            i = m;
+            m = n;
+            n = i;
             flip = true;
         }
 
 
-        var a_maps = _map(a_tokens,FuzzySearch.bitVector);
+        var a_maps = _map(a_tokens, FuzzySearch.bitVector);
         var a_tok, b_tok, a_mp;
 
         var rowmax = minimum_match, imax = -1, jmax = -1, v;
@@ -1391,7 +1458,7 @@ var FuzzySearch = (function () {
         //Shortcut: single possible pairing
         if (matchcount === 1) {
             match[imax] = jmax;
-            if(flip) FuzzySearch._flipmatch(match,n);
+            if (flip) FuzzySearch._flipmatch(match, n);
             return rowmax
         }
 
@@ -1402,10 +1469,10 @@ var FuzzySearch = (function () {
         }
 
 
-        var score = FuzzySearch._matchScoreGrid(C,match,thresholds);
+        var score = FuzzySearch._matchScoreGrid(C, match, thresholds);
 
         //Flip back the problem if necessary
-        if(flip) FuzzySearch._flipmatch(match,n);
+        if (flip) FuzzySearch._flipmatch(match, n);
 
         return score;
 
@@ -1467,20 +1534,20 @@ var FuzzySearch = (function () {
 
         var ilen = C.length;
         var jlen = C[depth].length;
-        if(jlen>32) jlen = 32;
+        if (jlen > 32) jlen = 32;
 
         var i, j, score;
         var include_thresh = score_thresholds[depth];
         var best_score = 0, best_index = -1;
         var has_child = (depth < ilen - 1);
-        var child_tree = cache_tree[depth+1], child_key;
+        var child_tree = cache_tree[depth + 1], child_key;
 
         for (j = 0; j < jlen; j++) {
 
-            var bit = 1<<j;
+            var bit = 1 << j;
 
             //if token previously used, skip
-            if(used_mask & bit) continue;
+            if (used_mask & bit) continue;
 
             //score for this match
             score = C[depth][j];
@@ -1490,9 +1557,9 @@ var FuzzySearch = (function () {
 
             //score for child match
             //if we already have computed this sub-block get from cache
-            if(has_child){
+            if (has_child) {
                 child_key = used_mask | bit;
-                if(child_key in  child_tree) score += child_tree[child_key][0];
+                if (child_key in  child_tree) score += child_tree[child_key][0];
                 else score += FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
             }
 
@@ -1504,10 +1571,10 @@ var FuzzySearch = (function () {
         }
 
         //try the move of "do not match this token against anything"
-        if(has_child) {
+        if (has_child) {
 
             child_key = used_mask;
-            if(child_key in  child_tree) score = child_tree[child_key][0];
+            if (child_key in  child_tree) score = child_tree[child_key][0];
             else  score = FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
 
             if (score > best_score) {
@@ -1518,7 +1585,7 @@ var FuzzySearch = (function () {
         }
 
 
-        cache_tree[depth][used_mask] = [best_score,best_index];
+        cache_tree[depth][used_mask] = [best_score, best_index];
         return best_score;
 
 
@@ -1527,17 +1594,17 @@ var FuzzySearch = (function () {
 
     FuzzySearch._flipmatch = function (match, newlen) {
 
-        var i,j;
+        var i, j;
         var ref = match.slice();
         match.length = newlen;
 
-        for(i=0;i<newlen;i++){
+        for (i = 0; i < newlen; i++) {
             match[i] = -1;
         }
 
-        for(i=0;i<ref.length;i++){
+        for (i = 0; i < ref.length; i++) {
             j = ref[i];
-            if( j>-1 && j<newlen ) match[j] = i;
+            if (j > -1 && j < newlen) match[j] = i;
         }
 
     };
@@ -1551,44 +1618,43 @@ var FuzzySearch = (function () {
 // Might need to swap input to match internal of a given algorithm
 //
 
-/*
-function lcs(a,b) {
 
-    var m = a.length;
-    var n = b.length;
-    var i, j;
+ function lcs(a,b) {
 
-    //init m by n array  with 0
-    var C = [], row = [], lcs = [];
-    for (j = 0; j < n; j++) row[j] = 0;
-    for (i = 0; i < m; i++) C[i] = row.slice();
+ var m = a.length;
+ var n = b.length;
+ var i, j;
 
-    //fill first row and col
-    C[0][0] = (a[0] === b[0]) ? 1 : 0;
-    for (i = 1; i < m; i++) C[i][0] = (a[i] === b[0] || C[i - 1][0]) ? 1 : 0
-    for (j = 1; j < n; j++) C[0][j] = (a[0] === b[j] || C[0][j - 1]) ? 1 : 0
-    console.log(JSON.stringify(C[0]));
+ //init m by n array  with 0
+ var C = [], row = [], lcs = [];
+ for (j = 0; j < n; j++) row[j] = 0;
+ for (i = 0; i < m; i++) C[i] = row.slice();
 
-    //bulk
-    for (i = 1; i < m; i++){
-        for (j = 1; j < n; j++) {
-            C[i][j] = (a[i] === b[j]) ? C[i - 1][j - 1] + 1 : Math.max(C[i][j - 1], C[i - 1][j]);
-        }
-        console.log(JSON.stringify(C[i]));
-    }
+ //fill first row and col
+ C[0][0] = (a[0] === b[0]) ? 1 : 0;
+ for (i = 1; i < m; i++) C[i][0] = (a[i] === b[0] || C[i - 1][0]) ? 1 : 0
+ for (j = 1; j < n; j++) C[0][j] = (a[0] === b[j] || C[0][j - 1]) ? 1 : 0
+ console.log(JSON.stringify(C[0]));
 
-    //backtrack
-    i--; j--;
-    while (i > -1 && j > -1) {
-        if (i && C[i][j] == C[i - 1][j])  i--;
-        else if (j && C[i][j] == C[i][j - 1]) j--;
-        else {
-            lcs.push(a[i]);
-            j--;
-            i--;
-        }
-    }
+ //bulk
+ for (i = 1; i < m; i++){
+ for (j = 1; j < n; j++) {
+ C[i][j] = (a[i] === b[j]) ? C[i - 1][j - 1] + 1 : Math.max(C[i][j - 1], C[i - 1][j]);
+ }
+ console.log(JSON.stringify(C[i]));
+ }
 
-    return lcs.reverse().join('');
-}
-*/
+ //backtrack
+ i--; j--;
+ while (i > -1 && j > -1) {
+ if (i && C[i][j] == C[i - 1][j])  i--;
+ else if (j && C[i][j] == C[i][j - 1]) j--;
+ else {
+ lcs.push(a[i]);
+ j--;
+ i--;
+ }
+ }
+
+ return lcs.reverse().join('');
+ }

@@ -136,6 +136,9 @@
             2kb</a> </label>
         <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
             220kb</a> </label>
+
+        <br>
+        <label> <input type="checkbox" name="free" id="free" checked /> Enable free word order </label>
     </form>
 </p>
 
@@ -304,6 +307,13 @@
         //el.typeahead('val', el.typeahead('val') );
 
     });
+
+    $('#free').change(function () {
+        fuzzyhound.set({
+            free_word_order: $(this).is(":checked")
+        })
+    })
+
 
 
 </script>
