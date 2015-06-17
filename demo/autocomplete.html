@@ -6,154 +6,304 @@
     <title></title>
 
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
+    <script src="http://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+    <!--script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script-->
+    <script src="typeahead.jquery.js"></script>
     <script src="../src/FuzzySearch.js"></script>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        h1, h2, p, form, label {
+            text-align: center;
+        }
+
+        h1, h2 {
+            margin-top:1.5em;
+            margin-bottom:0.5em;
+        }
+
+
+        .typeahead {
+            width: 90%;
+            max-width: 700px;
+            margin: auto;
+            display: block;
+            padding-bottom: 30px;
+            position: relative;
+        }
+
+        .typeahead input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            max-width: 700px;
+            padding: 10px;
+            opacity: 1;
+            background: none 0% 0% / auto repeat scroll padding-box border-box rgb(255, 255, 255);
+        }
+
+        .twitter-typeahead {
+            width: 100%;
+        }
+
+        .twitter-typeahead .tt-query,
+        .twitter-typeahead .tt-hint {
+            margin-bottom: 0;
+        }
+
+        .typeahead ul, .typeahead li {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            font: inherit;
+            font-size: 100%;
+            vertical-align: baseline;
+        }
+
+
+        .tt-menu, .ui-menu {
+            width: 100%;
+            max-width: 700px;
+            margin-top: 2px;
+            padding: 5px 0;
+            background-color: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 4px;
+            -webkit-box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+            background-clip: padding-box;
+
+        }
+
+        .tt-suggestion, .ui-menu-item {
+            display: block;
+            padding: 6px 20px;
+        }
+
+
+        .ui-helper-hidden-accessible {
+            display: none;
+        }
+
+        .typeahead-footer{
+            border-top:1px solid #eee;
+            margin-top:10px;
+            padding: 20px;
+        }
+
+        .title {
+            color: #222;
+        }
+
+        .title strong {
+            color: #000;
+        }
+
+        .author {
+            color: #666
+        }
+
+        .author strong {
+            color: #444
+        }
+
+        .score {
+            color: #888;
+        }
+
+    </style>
 
 
 </head>
-<body class="home">
+<body>
 
-<style>
-
-    .twitter-typeahead, .twitter-typeahead input {
-        width: 90%;
-        max-width: 700px;
-        margin:auto;
-        padding: 10px;
-        display: inline-block;
-    }
-
-    .title {
-        color: #222;
-    }
-
-    .title strong {
-        color: #000;
-    }
-
-    .author {
-        color: #666
-    }
-
-    .author strong {
-        color: #444
-    }
-
-    .score {
-        color: #888;
-    }
-
-    .hh {
-        background-color: yellow;
-    }
-
-</style>
 
 <h1>FuzzySearch Demo</h1>
-Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. <br/>
+
+<p>Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. </p>
 
 <h2>Dataset</h2>
-<form>
-    <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about 2kb</a> </label>
-    <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about 220kb</a> </label>
-</form>
+
+<p>
+    <form>
+        <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about
+            2kb</a> </label>
+        <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
+            220kb</a> </label>
+    </form>
+</p>
 
 <h2>Using Twitter Typeahead</h2>
 
-<input id="demo-query" name="demo-query" autocomplete="off" type="text" width="500px">
+<div class="typeahead">
+    <input id="demo-query" class="twitter-typeahead" name="demo-query" autocomplete="off" type="text">
+</div>
 
+
+<h2>Using Jquery UI Autocomplete</h2>
+
+<div class="typeahead">
+    <input id="demo-query-ui-auto" class="twitter-typeahead" name="demo-query-ui-auto" autocomplete="off" type="text">
+</div>
+
+<!-- allow to scroll so autocomplete is at top of page -->
+<div style="height: 500px;"></div>
 
 <script>
 
+    //
+    // Create main object
+    // We will fill the data once we have the JSON loaded
+    //
 
-        var fuzzyhound = new FuzzySearch();
-
-        $('#demo-query').typeahead({
-                    minLength: 2,
-                    highlight: false //we'll use FuzzySearch highlight instead
-                },
-                {
-                    name: 'task',
-                    limit:6,
-                    source: fuzzyhound,
-                    display: "item.title",
-                    templates: {
-                        suggestion: function (suggestion) {
-                            var item = suggestion.item;
-                            var query = suggestion._query;
-                            var author = item.author || item.authors.author;
-
-                            if ( Object.prototype.toString.call(author) === '[object Array]' ) {
-                                author =  author.join(", ");
-                            }
-
-                            return [
-
-                                "<div>",
-                                "<span class='title'>\"", fuzzyhound.highlight(query, item.title), "</span>\" by <span class='author'>", fuzzyhound.highlight(query, author), "</span>",
-                                "<span class='score'>(&nbsp;", suggestion.score.toFixed(2), "&nbsp;)</span><br><br>",
-                                "</div>"
-
-                            ].join("");
-                        },
-                        notFound: function (context) {
-                            return "<div class='typeahead-empty'> No result for \"" + context.query + "\"</div>"
-                        },
-                        footer: function(context){
-                            var render_end = performance.now();
-                            var str =  "<div class='typeahead-footer'> " +
-                                    "<br>"+
-                                    "Search took <strong>" + fuzzyhound.search_time.toFixed(3) + " ms</strong><br>" +
-                                    "Total (search+highlight+render):  <strong>" + (render_end - fuzzyhound.start_time).toFixed(3) + " ms</strong><br>" +
-                                    "Source contain " + fuzzyhound.source.length + " Items<br>" +
-                                    "Showing the bests out of " + fuzzyhound.results.length + " positive candidate<br>" +
-                                    "</div>";
-                            return str;
-
-                        }
-                    }
+    var fuzzyhound = new FuzzySearch({output_limit: 6});
 
 
-                }).bind('typeahead:select', function (ev, suggestion) {
-                    alert('Selection: ' + suggestion.item.title);
-                });
+    // - - - - - - - - - - - - - - - - - - - - - - -
+    //    Item template, shared for both autocompletes
+    // - - - - - - - - - - - - - - - - - - - - - - -
 
+    function itemTemplate(suggestion) {
+        var item = suggestion.item;
+        var query = suggestion._query;
+        var author = item.author || item.authors.author;
 
-        //Setup dataset switch
-        $.ajaxSetup({cache: true});
-
-        function setsource(url,keys){
-            $.getJSON(url).then(function (response) {
-                    fuzzyhound.set({
-                        source: response,
-                        keys: keys
-                    })
-                });
+        if (Object.prototype.toString.call(author) === '[object Array]') {
+            author = author.join(", ");
         }
 
-        //Load small dataset by default
-        setsource("books.json",["title", "author"]);
+        return [
+            "<div>",
+            "<span class='title'>\"", fuzzyhound.highlight(item.title), "</span>\" by <span class='author'>", fuzzyhound.highlight(author), "</span>",
+            "<span class='score'>(&nbsp;", suggestion.score.toFixed(2), "&nbsp;)</span>",
+            "</div>"
+        ].join("");
+    }
 
-        $('input[name=source]:radio').change(function(){
-            switch(this.value){
+    //
+    // Use footer to show some performance stats
+    //
 
-                case "large":
-                    setsource("books_large.json",["title", "authors.author"]);
-                    break;
+    function footerTemplate() {
+        var render_end = performance.now();
+        return "<div class='typeahead-footer'> " +
+                "Search took <strong>" + fuzzyhound.search_time.toFixed(3) + " ms</strong><br>" +
+                "Total (search+highlight+render):  <strong>" + (render_end - fuzzyhound.start_time).toFixed(3) + " ms</strong><br>" +
+                "Source contain " + fuzzyhound.source.length + " Items<br>" +
+                "Showing the bests out of " + fuzzyhound.results.length + " positive candidate<br>" +
+                "</div>";
+    }
 
-                case "small":
-                default:
-                    setsource("books.json",["title", "author"]);
-                    break;
-            }
+    //- - - - - - - - - - -
+    //   Typeahead Setup
+    // - - - - - - - - - - -
 
-            el = $('#demo-query');
-            el.typeahead('val', el.typeahead('val') );
+    $('#demo-query').typeahead({
+                minLength: 2,
+                highlight: false //we'll use FuzzySearch highlight instead
+            },
+            {
+                name: 'task',
+                limit: 100, // let fuzzyhound apply limit
+                source: fuzzyhound,
+                display: "item.title",
+                templates: {
+                    suggestion: itemTemplate,
+                    footer: footerTemplate,
+                    pending: ""
+                }
 
+            }).bind('typeahead:select', function (ev, suggestion) {
+                alert('Selection: ' + suggestion.item.title);
+            });
+
+
+    //- - - - - - - - - - -
+    //    Jquery UI Setup
+    // - - - - - - - - - - -
+
+    var jq_auto =
+            $("#demo-query-ui-auto").autocomplete({
+                minLength: 2,
+                delay: 150,
+                source: function (request, response) {
+                    response(fuzzyhound.search(request.term));
+                },
+                messages: {
+                    noResults: '',
+                    results: function () {
+                    }
+                }
+
+            });
+
+    //Get instance to extend
+    var jq_instance = jq_auto.autocomplete("instance");
+
+    //Custom item
+    jq_instance._renderItem = function (ul, item) {
+        return $("<li>").append(itemTemplate(item)).appendTo(ul);
+    };
+
+    //Custom footer
+    jq_instance._renderMenu = function (ul, items) {
+        var nbitems = items.length, i = -1;
+        while (++i < nbitems) {
+            var display = items[i].item.title;
+            this._renderItem(ul, items[i])
+                    .data("ui-autocomplete-item",
+                    {display: display, value: display});
+        }
+        $("<li>").append(footerTemplate()).data("ui-autocomplete-item", {display: "", value: ""}).appendTo(ul);
+    };
+
+
+    // - - - - - - - - - - - -
+    //   Setup dataset switch
+    //- - - - - - - - - - - - -
+
+    $.ajaxSetup({cache: true});
+    function setsource(url, keys) {
+        $.getJSON(url).then(function (response) {
+            fuzzyhound.set({
+                source: response,
+                keys: keys
+            })
         });
+    }
 
+    //Load small dataset by default
+    setsource("books.json", ["title", "author"]);
 
+    // - - - - - - - - - - - -
+    //   Dataset switch UI
+    //- - - - - - - - - - - - -
 
+    $('input[name=source]:radio').change(function () {
+
+        switch (this.value) {
+
+            case "large":
+                setsource("books_large.json", ["title", "authors.author"]);
+                break;
+
+            case "small":
+            default:
+                setsource("books.json", ["title", "author"]);
+                break;
+        }
+
+        //
+        //el = $('#demo-query');
+        //el.typeahead('val', el.typeahead('val') );
+
+    });
 
 
 </script>

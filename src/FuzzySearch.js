@@ -1,9 +1,8 @@
 /**
- * FuzzySearch.js
+ * @license FuzzySearch.js
  * Autocomplete suggestion engine using approximate string matching
  * https://github.com/jeancroy/FuzzySearch
  *
- * @license:
  * Copyright (c) 2015, Jean Christophe Roy
  * Licensed under The MIT License.
  * http://opensource.org/licenses/MIT
@@ -48,7 +47,10 @@ var FuzzySearch = (function () {
         bonus_position_decay: 0.7,       // Exponential decay for position bonus (smaller : more importance to first item)
 
         score_round: 0.1,                // Two item that have the same rounded score are sorted alphabetically
-        recover_match: true,             // Recover original spelling of field that has matched (before normalisation)
+        recover_match: false,             // Recover original spelling of field that has matched (before normalisation)
+
+        output_limit:0,                  // Return up to N result, 0 to disable
+
         output_map: "",                  // Transform the output.
                                          // output_map="" return inner working object {score:...,item:...,match:..., matchIndex:...}
                                          // output_map="item" return original object. output_map="item.this.that" output a field of object.
@@ -62,11 +64,13 @@ var FuzzySearch = (function () {
         token_minimum_length: 2,          //Avoid processing very small words
                                           //Note that they still appear in single token "broken spacebar mode"
 
-        tt_throttle: 150,                // Throttle ttadapter. Will try to learn actual time cost.
+        interactive_debounce: 150,       // Debounce ttadapter or other live autocomplete.
+                                         // Will try to learn actual time cost.
                                          // This is initial value. Set to 0 to disable.
 
-        tt_throttle_mult: 1.2,           //Overhead for variability and to allow other things to happens (like redraw, highlight ).
+        interactive_mult: 1.2,           //Overhead for variability and to allow other things to happens (like redraw, highlight ).
 
+        interactive_burst: 3,            //Allow short burst, prevent flicker due to debounce supress
 
         highlight_prefix: false,         // true: force prefix as part of highlight, (false: minimum gap, slower)
         highlight_bridge_gap: 2,         // display small gap as substitution, set to size of gap, 0 to disable
@@ -91,7 +95,7 @@ var FuzzySearch = (function () {
     var BV_MAX_SIZE = 31;
 
     function FuzzySearch(options) {
-        if(options==undefined) options = {};
+        if(options===undefined) options = {};
         FuzzySearch.setup(this,_defaults,options)
     }
 
@@ -148,7 +152,7 @@ var FuzzySearch = (function () {
 
         //Allow to overwrite some options, keeping previous intact.
         set: function(options){
-            if(options==undefined) options = {};
+            if(options===undefined) options = {};
             FuzzySearch.setup(this,this,options);
         },
 
@@ -159,7 +163,7 @@ var FuzzySearch = (function () {
             var time_start = clock.now();
             this.start_time = time_start;
 
-            var query = this._prepQuery(querystring);
+            var query = this.query = this._prepQuery(querystring);
             var score_init = query.tokens_score.slice();
 
             var thresh_include = this.thresh_include;
@@ -233,11 +237,11 @@ var FuzzySearch = (function () {
             // equal rounded score: alphabetical order
             results = results.sort(function (a, b) {
                 var d = b.score - a.score;
-                return d == 0 ? a.alphaSortKey.localeCompare(b.alphaSortKey) : d;
+                return d === 0 ? a.alphaSortKey.localeCompare(b.alphaSortKey) : d;
             });
 
-            if (this.output_map.length) {
-                results = FuzzySearch.mapField(results, this.output_map);
+            if (this.output_map.length || this.output_limit > 0) {
+                results = FuzzySearch.mapField(results, this.output_map, this.output_limit);
             }
 
             var time_end = clock.now();
@@ -396,42 +400,81 @@ var FuzzySearch = (function () {
 
         },
 
-        __ttAdapter: function ttAdapter() {
+        //Get a debounced version of search method with callbacks
 
+        getInteractive: function(){
 
             var self = this;
+            var wait = this.interactive_debounce;
+            var mult = this.interactive_mult;
+            var burst = this.interactive_burst;
 
-            if(this.tt_throttle == 0){
-                return (function (query, sync_callback) { return sync_callback(self.search(query)) })
+            // Debounce off
+            if(wait === 0){
+                return (function (query, immediate_cb, suppress_cb, finally_cb ) { return immediate_cb(self.search(query)) })
             }
 
-            // Throttle
-            // Allow short burst ...
+            // Debounce
+             var clock = (performance && performance.now) ? performance : Date;
+            var timeout, cache;
+            var count= 0, supressed=false;
 
-            var last = 0;
-            var wait = this.tt_throttle;
-            var cache;
-            var mult = this.tt_throttle_mult;
-            var clock = (performance && performance.now) ? performance : Date;
+            var later = function(query,callback) {
+                timeout = null;
+                if(supressed){
+                    cache =  self.search(query);
+                    callback(cache);
+                    console.log("debounce-end");
+                }
+                count = 0;
+                supressed = false;
+            };
 
-            return function (query, sync_callback) {
+            return function (query, immediate_cb, suppress_cb, finally_cb) {
 
-                        var now = clock.now();
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait,query, finally_cb);
 
-                        if( now-last < wait ){
-                            return sync_callback(self.search(query))
-                        }
+                if(++count<burst){
 
-                        last = now;
-                        cache = self.search(query);
-                        var ret = sync_callback(cache);
-                        now = clock.now();
+                    supressed = false;
 
-                        //try to learn  typical time;
-                        wait = 0.5*wait + 0.5*mult*(now-last);
-                        return ret;
+                    var before  =  clock.now();
+                    cache = self.search(query);
+                    var ret = immediate_cb(cache);
+                    var now = clock.now();
 
-             }
+                    //consume
+                    // async_callback([]);
+
+                    //try to learn  typical time (modified by mult factor);
+                    wait = 0.5*wait + 0.5*mult*(now-before);
+                    return ret;
+
+                }else{
+
+                    console.log("debounce-supress");
+                    supressed = true;
+                    return suppress_cb(cache);
+
+                }
+
+            }
+
+
+
+        },
+
+
+        __ttAdapter: function ttAdapter() {
+
+            var debounced = this.getInteractive();
+            var noop = function(a){};
+
+            return function(query,sync,async){
+                debounced(query,sync,noop,async);
+            }
+
         }
 
 
@@ -485,8 +528,8 @@ var FuzzySearch = (function () {
 
             key = parts[level];
             if(key === "*") break;
-            if(!(key in obj)) return list;
             obj = obj[key];
+            if(obj === undefined) return list;
             level++
 
         }
@@ -496,7 +539,7 @@ var FuzzySearch = (function () {
         var isObject = ( type === '[object Object]' );
 
 
-        if (level == nb_level) {
+        if (level === nb_level) {
 
             if (isArray) {
                 for (i = 0; i < obj.length; i++) {
@@ -539,16 +582,18 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.mapField = function(source, path){
-
-        if (path=="") return source.slice();
+    FuzzySearch.mapField = function(source, path, limit){
 
         var n = source.length;
+        if (limit > 0 && limit < n ) n = limit;
+        if (path=="") return source.slice(0,n);
+
         var out = new Array(n);
         var i = -1;
         var obj;
 
-        if( path.indexOf(".") == -1){
+        if( path.indexOf(".") === -1){
+
             //fast case no inner loop
             while (++ i < n) {
                 obj = source[i];
@@ -556,18 +601,18 @@ var FuzzySearch = (function () {
             }
 
         }else{
+
             //genaral case
             var parts = path.split(".");
             var nb_level = parts.length;
             obj =  source[i];
+
             while (++ i < n) {
                 var level = -1;
                 while( ++level < nb_level){
-
                     var key = parts[level];
                     obj = obj[key];
-                    if(obj == undefined) break;
-
+                    if(obj === undefined) break;
                 }
 
                 out[i] = obj;
@@ -609,7 +654,7 @@ var FuzzySearch = (function () {
 
     FuzzySearch.score = function (a, b, options) {
 
-        if (options == undefined) options = _defaults;
+        if (options === undefined) options = _defaults;
 
         //do as much work as possible in as bit-parallel computation
         if( b.length > a.length && b.length < BV_MAX_SIZE){var tmp=a; a=b; b=tmp;}
@@ -628,7 +673,7 @@ var FuzzySearch = (function () {
         var n = b.length;
 
         var k = m < n ? m : n;
-        if (k == 0) return 0;
+        if (k === 0) return 0;
 
         //normalize score against length of both inputs
         var sz_score = (m + n) / ( 2.0 * m * n);
@@ -639,7 +684,7 @@ var FuzzySearch = (function () {
         else{ for (i = 0; i < k && (a[i] === b[i]); i++) prefix++;}
 
         //shortest string consumed
-        if (prefix == k) {
+        if (prefix === k) {
             lcs_len = prefix;
             return sz_score * lcs_len * lcs_len + bonus_prefix*prefix;
         }
@@ -710,16 +755,14 @@ var FuzzySearch = (function () {
     FuzzySearch.posVector = function(pattern){
 
         var m = pattern.length;
-        var i, c;
+        var i, c, v;
         var map = {};
 
         for(i=0;i<m;i++){
             c = pattern[i];
-            if(c in map){
-                map[c].push(i);
-            }else{
-                map[c] = [i];
-            }
+            v = map[c];
+            if( v === undefined ) map[c] = [i];
+            else v.push(i);
         }
 
         for(c in map){
@@ -803,7 +846,7 @@ var FuzzySearch = (function () {
         // To avoid dealing with to many edge case we place
         // a special token at start & end of list
         var last_line, current_line, line_index, last_end, block_end;
-        if(prefix==undefined) prefix = 0;
+        if(prefix === undefined) prefix = 0;
 
         if(prefix)
             last_line = [ [0,prefix], [ Infinity, Infinity] ] ;
@@ -820,7 +863,7 @@ var FuzzySearch = (function () {
 
             //Each line we process a single character of b
             match_list = aMap[b[j]];
-            if (match_list == undefined) continue;
+            if (match_list === undefined) continue;
 
             //New line
             current_line = [];
@@ -865,7 +908,7 @@ var FuzzySearch = (function () {
                 // Decide where to register the match ...
                 //
 
-                if (match_pos == last_end) {
+                if (match_pos === last_end) {
                     //End of last block ? (step a.ii)
                     current_line[line_index][1]++;
                 }
@@ -873,7 +916,7 @@ var FuzzySearch = (function () {
 
                     //Increase need it's own block ( step a.i)
                     //try to reuse block that will get deleted.
-                    if(block_size == 1) {
+                    if(block_size === 1) {
                         //Can we reuse next block ?
                         block[0] = match_pos;
                         block[1] = match_pos + 1;
@@ -914,13 +957,13 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.prototype.highlight = function (a, b) {
-        return FuzzySearch.highlight(a, b, this)
+    FuzzySearch.prototype.highlight = function ( b) {
+        return FuzzySearch.highlight(this.query.normalized, b, this)
     };
 
     FuzzySearch.highlight = function (a, b, options) {
 
-        if(options==undefined) options = _defaults;
+        if(options === undefined) options = _defaults;
         if(!b) return "";
 
         //var time_start = performance.now();
@@ -948,7 +991,7 @@ var FuzzySearch = (function () {
         var strArr = [];
 
         //shortcut no match
-        if (match_score == 0) return b;
+        if (match_score === 0) return b;
 
         //Test "spacebar is broken" no token match
         var fused_score = FuzzySearch.score(aa, bb, options);
@@ -960,12 +1003,12 @@ var FuzzySearch = (function () {
             match_list = [0];
         }
 
-
-        for (var j = 0; j < disp_tokens.length; j++) {
+        var nbtok = disp_tokens.length, j=-1;
+        while ( ++j < nbtok) {
 
             var i = match_list[j];
 
-            if (i == -1) {
+            if (i === -1) {
                 strArr.push(disp_tokens[j] + " ");
                 continue;
             }
@@ -980,7 +1023,8 @@ var FuzzySearch = (function () {
             FuzzySearch.align(ta, tb, start_positions, end_positions);
             var len = start_positions.length;
 
-            for (var k = 0; k < len; k++) {
+            var k = -1;
+            while (++k < len) {
 
                 var s = start_positions[k];
                 var e = end_positions[k];
@@ -1019,7 +1063,7 @@ var FuzzySearch = (function () {
 
     FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 
-        if(options==undefined) options = _defaults;
+        if(options===undefined) options = _defaults;
 
         var wm = 1.0;   // score to making a match
         var wo = -0.1;  // score to open a gap
@@ -1273,7 +1317,7 @@ var FuzzySearch = (function () {
 
     FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options) {
 
-        if(options==undefined) options = _defaults;
+        if(options===undefined) options = _defaults;
 
         var minimum_match = options.minimum_match;
         var bonus_match_start = options.bonus_match_start;
@@ -1342,10 +1386,10 @@ var FuzzySearch = (function () {
         }
 
         //Shortcut: no match
-        if (matchcount == 0) return 0;
+        if (matchcount === 0) return 0;
 
         //Shortcut: single possible pairing
-        if (matchcount == 1) {
+        if (matchcount === 1) {
             match[imax] = jmax;
             if(flip) FuzzySearch._flipmatch(match,n);
             return rowmax
