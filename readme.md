@@ -45,6 +45,50 @@ Computer science often think similarity between two string in term of error (dis
 
 They are related but different problem and the bet of this project is that LCS could be useful for auto-complete scenario (with some help). As a bonus it's often faster to compute.
 
+Algorythm
+=========
+The whole library is a very elaborate suport arround the following snippet.
+Let `strA` be the query, position of each character is recorded for fast search later. Let `strB` be the entry in the database we are trying to score. Second loop is the important part. One lookup and 4 bit operation per character of `strB`. That's where speed is.
+
+
+```javascript
+var m = strA.length;
+var n = strB.length;
+var aMap = {};
+
+//Map position of each character of a
+// --------------"character"
+// aMap["a"] =  0b001010000
+
+for (i = 0; i < m; i++) {
+    aMap[strA[i]] |= (1 << i)
+}
+
+var mask = ( 1 << m ) - 1;
+var S = mask, M, U;
+
+// Fill LCS dynamic programing table
+// bitvetor S record position of increase.
+// Whole line computed in parralel !
+// (Same cost to update 1 bit or 32)
+// Hyyrö, 2004 S=V'=~V
+
+for (j = 0; j < n; j++) {
+    M = aMap[strB[j]];
+    U = S & M;
+    S = (S + U) | (S - U);
+}
+
+S = ~S & mask;
+//Count the numer of bit set (1) in S.
+//this give you number of matching character in strA,strB.
+//You still have work to do to make a descent score.
+```
+
+This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
+Plus no elaborate data structure so constant should be low. Count dictionary as elaborate ? Maybe, but whole javascript is built around dictionary, even plain array.
+
+
 
 Basic usage
 =====================

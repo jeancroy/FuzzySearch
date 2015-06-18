@@ -7,8 +7,8 @@
 
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
     <script src="http://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
-    <!--script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script-->
-    <script src="typeahead.jquery.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
+    <!--script src="typeahead.jquery.js"></script-->
     <script src="../src/FuzzySearch.js"></script>
 
     <style>
@@ -117,6 +117,11 @@
             color: #888;
         }
 
+        td{
+            vertical-align: top;
+            text-align: left;
+        }
+
     </style>
 
 
@@ -137,8 +142,13 @@
         <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
             220kb</a> </label>
 
-        <br>
-        <label> <input type="checkbox" name="free" id="free" checked /> Enable free word order </label>
+        <br><br>
+        <label> <input type="checkbox" name="free" id="free" checked /> Enable per token score </label><br>
+        <table style="text-align: left; display:block; width:90%; margin:auto; max-width:600px;vertical-align: top;margin-top:0">
+            <tr><td><strong>Enable:</strong></td><td>Allow free word order, try to respect word boundary &amp;  match start of words, Different words can match different fields. Friendlier for complete sentences !</td></tr>
+            <tr><td><strong>Disable:</strong></td><td>Very fast ! Match whole query against whole field. All character in order, score best field for each item. If your dataset have one word per item, (or one word per field) this might be the best option for you</td></tr>
+        </table>
+
     </form>
 </p>
 
@@ -173,6 +183,7 @@
     // - - - - - - - - - - - - - - - - - - - - - - -
 
     function itemTemplate(suggestion) {
+
         var item = suggestion.item;
         var query = suggestion._query;
         var author = item.author || item.authors.author;
@@ -183,10 +194,12 @@
 
         return [
             "<div>",
-            "<span class='title'>\"", fuzzyhound.highlight(item.title), "</span>\" by <span class='author'>", fuzzyhound.highlight(author), "</span>",
+            "<span class='title'>\"", fuzzyhound.highlight(item.title), "\"</span>",
+            "<span class='author'>  by ", fuzzyhound.highlight(author), "</span>",
             "<span class='score'>(&nbsp;", suggestion.score.toFixed(2), "&nbsp;)</span>",
             "</div>"
         ].join("");
+
     }
 
     //
@@ -198,8 +211,8 @@
         return "<div class='typeahead-footer'> " +
                 "Search took <strong>" + fuzzyhound.search_time.toFixed(3) + " ms</strong><br>" +
                 "Total (search+highlight+render):  <strong>" + (render_end - fuzzyhound.start_time).toFixed(3) + " ms</strong><br>" +
+                "Query: <strong>" + fuzzyhound.query.normalized.length + "</strong> chars in <strong>" + fuzzyhound.query.tokens.length + "</strong> tokens <br>" +
                 "Source contain " + fuzzyhound.source.length + " Items<br>" +
-                "Showing the bests out of " + fuzzyhound.results.length + " positive candidate<br>" +
                 "</div>";
     }
 
@@ -310,7 +323,7 @@
 
     $('#free').change(function () {
         fuzzyhound.set({
-            free_word_order: $(this).is(":checked")
+            score_per_token: $(this).is(":checked")
         })
     })
 
