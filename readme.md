@@ -56,33 +56,40 @@ var m = strA.length;
 var n = strB.length;
 var aMap = {};
 
-//Map position of each character of a
-// --------------"character"
-// aMap["a"] =  0b001010000
+// - - - - - - - -
+// PRECOMPUTE:
+// - - - - - - - -
+
+//Map position of each character of a (first char is lsb, so rigth to left)
+// --------------"retcarahc"
+// aMap["a"] =  0b000010100
 
 for (i = 0; i < m; i++) {
     aMap[strA[i]] |= (1 << i)
 }
 
 var mask = ( 1 << m ) - 1;
-var S = mask, M, U;
+var S = mask, U;
+
+// - - - - - - - -
+// For each item
+// - - - - - - - -
 
 // Fill LCS dynamic programing table
 // bitvetor S record position of increase.
 // Whole line computed in parralel !
 // (Same cost to update 1 bit or 32)
-// Hyyrö, 2004 S=V'=~V
+// See Hyyrö, 2004 with S representing V'
 
 for (j = 0; j < n; j++) {
-    M = aMap[strB[j]];
-    U = S & M;
+    U = S & aMap[strB[j]];
     S = (S + U) | (S - U);
 }
 
 S = ~S & mask;
 //Count the numer of bit set (1) in S.
-//this give you number of matching character in strA,strB.
-//You still have work to do to make a descent score.
+//this give you number of matching character (llcs) in strA, strB.
+//We'll see below there's still improvement that can be made to this score.
 ```
 
 This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).

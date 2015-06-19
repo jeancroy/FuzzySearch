@@ -476,10 +476,12 @@ var FuzzySearch = (function () {
 
                     //try to learn  typical time (time mult factor);
                     wait = 0.5 * wait + 0.5 * mult * (now - before);
+                    //console.log(wait);
                     return ret;
 
                 } else {
                     supressed = true;
+                    //console.log("supress");
                     return suppress_cb(cache);
                 }
             }
@@ -765,12 +767,11 @@ var FuzzySearch = (function () {
         j = prefix-1;
         while (++j < n) {
             c = b[j];
-            // work with or without the continue, because undefined cast to 0
-            // cost of testing branch VS cost of casting undefined to 0 + normal op
-            // undefined look faster in un-optimised code, but may cause deoptimisation :(
-            if( !(c in aMap) ) continue;
-            U = S & aMap[c];
-            S = (S + U) | (S - U); // Hyyrö, 2004 S=V'=~V
+            if( c in aMap ) {
+                // Hyyrö, 2004 S=V'=~V
+                U = S & aMap[c];
+                S = (S + U) | (S - U);
+            }
         }
 
 
