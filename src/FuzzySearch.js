@@ -220,13 +220,14 @@ var FuzzySearch = (function () {
 
                 }
 
-                if(opt_score_tok) {
+                var nbtokens = query.tokens.length;
+                if(opt_score_tok && nbtokens>1) {
 
                     // Mix best field score (all keyword in one field)
                     // with best keyword score (all keyword any field)
                     var query_score = 0;
                     var score_per_token = query.tokens_score;
-                    var i = -1, nbtokens = score_per_token.length;
+                    var i = -1;
                     while (++i < nbtokens) {
                         query_score += score_per_token[i]
                     }
@@ -261,7 +262,7 @@ var FuzzySearch = (function () {
             results = results.sort(function (a, b) {
                 var d = b.score - a.score;
                 if( d!==0) return d;
-                var ak = a.alphaSortKey, bk = b.alphaSortKey;
+                var ak = a.sortKey, bk = b.sortKey;
                 return ak > bk ? 1 : ( ak < bk ? -1 : 0);
             });
 
@@ -286,8 +287,6 @@ var FuzzySearch = (function () {
             var minimum_match = this.minimum_match;
 
             var field_score = 0;
-            //var field_tokens = field.split(" ");
-
             var query_tokens_len = query_tokens.length;
             var field_tokens_len = field_tokens.length;
 
@@ -298,8 +297,6 @@ var FuzzySearch = (function () {
             while (++query_index < query_tokens_len) {
 
                 var query_tk = query_tokens[query_index];
-                //if (!query_tk.length) continue;
-
                 var query_tk_bv = query_bitvectors[query_index];
                 var best_score_this_field = 0;
 
@@ -311,8 +308,6 @@ var FuzzySearch = (function () {
                 while (++tok_index < field_tokens_len) {
 
                     var item_tk = field_tokens[tok_index];
-                    //if (!item_tk.length) continue;
-
                     var test_score = FuzzySearch.score_map(query_tk, item_tk, query_tk_bv, bonus_match_start);
 
                     //each query token is matched against it's best field token
@@ -429,7 +424,7 @@ var FuzzySearch = (function () {
                 item: item,
                 "matchIndex": matched_field_index,
                 "match": matched,
-                "alphaSortKey": sk
+                "sortKey": sk
             }
 
 
@@ -1619,6 +1614,44 @@ var FuzzySearch = (function () {
         }
 
     };
+
+
+    //
+    // Identify
+    // Use to compare bloodhound, get unique set etc
+    //
+
+    // 32 bit FNV-1a hash
+    // Ref.: http://isthe.com/chongo/tech/comp/fnv/
+    function fnv32a( str )
+    {
+        var hash = 0x811c9dc5;
+        for ( var i = 0; i < str.length; ++i )
+        {
+            hash ^= str.charCodeAt(i);
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+        }
+        return hash >>> 0;
+    }
+
+    FuzzySearch.identify = function (item, keys) {
+        var str;
+
+        var type = Object.prototype.toString.call(keys);
+
+        if(!keys || !keys.length)
+            str = JSON.stringify(item);
+        else if(type === '[object String]')
+            str = FuzzySearch.getField(item,keys);
+        else if(type === '[object Array]')
+            str = FuzzySearch.generateFields(item,keys).join('¬');
+        else
+            str = JSON.stringify(item);
+
+        return  fnv32a( str );
+
+    };
+
 
     return FuzzySearch;
 
