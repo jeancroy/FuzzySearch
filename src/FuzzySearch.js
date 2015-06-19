@@ -77,6 +77,10 @@ var FuzzySearch = (function () {
         token_field_min_length: 3,       // include greater or equal, in item field
         token_max_length: 64,            // Shorten large token to give more predictive performance.
 
+        // len(field_tok)/len(query_tok) = n/m
+        token_min_rel_size: 0.6,         // Field token should contain query token. Reject field token that are too small.
+        token_max_rel_size: 6,           // Large field token tend to match against everything. Ensure query is long enough to be specific.
+
         max_search_tokens: 10,           // Because of free word order, each search token add cost equivalent to one traversal
                                          // additional tokens are lumped as a nth+1 token
 
@@ -285,6 +289,8 @@ var FuzzySearch = (function () {
             var bonus_match_start = this.bonus_match_start;
             var bonus_token_order = this.bonus_token_order;
             var minimum_match = this.minimum_match;
+            var min_rs = this.token_min_rel_size;
+            var max_rs = this.token_max_rel_size;
 
             var field_score = 0;
             var query_tokens_len = query_tokens.length;
@@ -299,6 +305,7 @@ var FuzzySearch = (function () {
                 var query_tk = query_tokens[query_index];
                 var query_tk_bv = query_bitvectors[query_index];
                 var best_score_this_field = 0;
+                var m = query_tk.length;
 
                 //for token order bonus
                 var current_match_pos = -1;
@@ -307,8 +314,12 @@ var FuzzySearch = (function () {
                 var tok_index = -1;
                 while (++tok_index < field_tokens_len) {
 
-                    var item_tk = field_tokens[tok_index];
-                    var test_score = FuzzySearch.score_map(query_tk, item_tk, query_tk_bv, bonus_match_start);
+                    var field_tk = field_tokens[tok_index];
+                    var n = field_tk.length;
+
+                    if(   n < min_rs*m || n > max_rs*m ) continue;
+
+                    var test_score = FuzzySearch.score_map(query_tk, field_tk, query_tk_bv, bonus_match_start);
 
                     //each query token is matched against it's best field token
                     if (test_score > best_score_this_field) {
@@ -356,6 +367,7 @@ var FuzzySearch = (function () {
             }
             else {
                 item_fields = FuzzySearch.generateFields(item, this.keys);
+                //Possible speedup: single loop to normalize & tokenize instead of two map.
                 item_fields = _map(item_fields, FuzzySearch.normalize);
                 item_fields = _map(item_fields, this._tokenize, this);
                 if (this.cache_fields) item._fields_ = item_fields;
@@ -409,13 +421,10 @@ var FuzzySearch = (function () {
             }
 
             //sorting by string without accent make the most sens
-            if(this.cache_fields){
+            if(this.cache_fields)
                 sk = item._fields_[0].join(" ");
-            }
-            else{
+            else
                 sk = FuzzySearch.normalize( f?f[0] : FuzzySearch.getField(item, this.keys[0]) );
-            }
-
 
             item_score = Math.round(item_score / this.score_round) * this.score_round;
 
@@ -600,9 +609,7 @@ var FuzzySearch = (function () {
 
         }
 
-
         return list;
-
     };
 
     FuzzySearch.filterSize = function (array, minSize, maxSize) {
@@ -794,11 +801,6 @@ var FuzzySearch = (function () {
 
     };
 
-
-    //
-    // Need one bit buffer to prevent overflow on (S + U) | (S - U)
-    //
-
     FuzzySearch.bitVector = function (token) {
 
         var map = {};
@@ -843,6 +845,10 @@ var FuzzySearch = (function () {
 
     };
 
+    //
+    // Compute LLCS, using vector of position.
+    //
+    // Based on:
     // An input sensitive online algorithm for LCS computation
     // Heikki Hyyro 2009
     //
