@@ -170,7 +170,7 @@ var FuzzySearch = (function () {
 
         search: function (querystring) {
 
-            var clock = (performance && performance.now) ? performance : Date;
+            var clock = (window.performance && window.performance.now) ? window.performance : Date;
 
             var time_start = clock.now();
             this.start_time = time_start;
@@ -749,9 +749,9 @@ var FuzzySearch = (function () {
         var prefix = 0;
         if (a === b) prefix = k; //speedup equality
         else {
-            i = -1;
-            while (++i < k && (a[i] === b[i])){}
-            prefix = i+1;
+            i = 0;
+            while ( (a[i] === b[i]) && (++i < k) ){}
+            prefix = i;
         }
 
         //shortest string consumed
@@ -826,7 +826,7 @@ var FuzzySearch = (function () {
 
     FuzzySearch.posVector = function (pattern) {
 
-        var map = {},c,v;
+        var map = {},c;
 
         var  m = pattern.length, i = -1;
         while (++i < m) {
@@ -1408,7 +1408,7 @@ var FuzzySearch = (function () {
         //
         // to minimise recursion depth, "a" should be smaller than "b"
         // we can flip the problem if we believe we can save enough
-        // to justify to cost if flipping it back at the end
+        // to justify to cost of flipping it back at the end
         //
 
         var flip = false;
@@ -1549,7 +1549,7 @@ var FuzzySearch = (function () {
         var jlen = C[depth].length;
         if (jlen > 32) jlen = 32;
 
-        var i, j, score;
+        var j, score;
         var include_thresh = score_thresholds[depth];
         var best_score = 0, best_index = -1;
         var has_child = (depth < ilen - 1);
@@ -1669,7 +1669,7 @@ var FuzzySearch = (function () {
 // Might need to swap input to match internal of a given algorithm
 //
 
-/*
+
  function lcs(a,b) {
 
      var m = a.length;
@@ -1709,4 +1709,3 @@ var FuzzySearch = (function () {
 
      return lcs.reverse().join('');
  }
-*/
