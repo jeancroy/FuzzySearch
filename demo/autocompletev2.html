@@ -8,8 +8,7 @@
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
     <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
-    <!--script src="typeahead.jquery.js"></script-->
-    <script src="../src/FuzzySearch.js"></script>
+    <script src="../src/FuzzySearchv2.js"></script>
 
     <style>
 
@@ -211,7 +210,7 @@
         return "<div class='typeahead-footer'> " +
                 "Search took <strong>" + fuzzyhound.search_time.toFixed(3) + " ms</strong><br>" +
                 "Total (search+highlight+render):  <strong>" + (render_end - fuzzyhound.start_time).toFixed(3) + " ms</strong><br>" +
-                "Query: <strong>" + fuzzyhound.query.normalized.length + "</strong> chars in <strong>" + fuzzyhound.query.tokens.length + "</strong> tokens <br>" +
+                "Query: <strong>" + fuzzyhound.query.normalized.length + "</strong> chars <br>" +
                 "Source contain " + fuzzyhound.source.length + " Items<br>" +
                 "</div>";
     }

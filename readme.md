@@ -95,7 +95,16 @@ S = ~S & mask;
 This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
 Plus no elaborate data structure so constant should be low. Count dictionary as elaborate ? Maybe, but whole javascript is built around dictionary, even plain array.
 
+V2
+----
 
+Just after we tell you how bit parralelism allow to process a 30 char search at the same cost of a single char,
+we go on and apply the algorithm on english word using of about 5 char, and we use 5 out of 30 available bits.
+V2 use a mofified algorithm that allow to pack multiple words in a single 32bit numbers and keep independent score for each word.
+(For example we can use a single pass to process 6 words of 5 char) instead of 6 different pass. 
+
+Theoretical speedup is important.  However it make scoring more complex, so in the above case we have a speedup of about 2x instead of 6x or so.
+There's probably room to improve the code.
 
 Basic usage
 =====================
