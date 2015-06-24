@@ -58,6 +58,9 @@ var FuzzySearch = (function () {
                                          // if false, bypass at least half the computation cost, very fast
                                          // also disable different token that score different field, because no more token!!
 
+        score_test_fused: true,           // Try one extra match where we disregard token separation.
+                                          // "oldman" match "old man"
+
         //
         //  Output sort & transform
         //
@@ -210,7 +213,7 @@ var FuzzySearch = (function () {
                     if(opt_score_tok)
                         field_score = this._scoreField(item_fields[field_index], query);
                     else
-                        field_score = FuzzySearch.score_map(query.normalized,item_fields[field_index].join(" "),query.fused_token,this.bonus_match_start);
+                        field_score = FuzzySearch.score_map(query.normalized,item_fields[field_index].join(" "),query.fused_map,this.bonus_match_start);
 
                     field_score *= (1.0 + position_bonus);
                     position_bonus *= opt_bpd;
@@ -346,12 +349,14 @@ var FuzzySearch = (function () {
 
             }
 
-            // test "space bar is broken" no token match
-            var fused_score = FuzzySearch.score_map(query.normalized, field_tokens.join(" "), query.fused_token, bonus_match_start);
-            field_score = fused_score > field_score ? fused_score : field_score;
+            if(this.score_test_fused){
+                // test "space bar is broken" no token match
+                var fused_score = FuzzySearch.score_map(query.normalized, field_tokens.join(" "), query.fused_map, bonus_match_start);
+                field_score = fused_score > field_score ? fused_score : field_score;
 
-            if (fused_score > query.fused_score) {
-                query.fused_score = fused_score;
+                if (fused_score > query.fused_score) {
+                    query.fused_score = fused_score;
+                }
             }
 
             return field_score;
@@ -406,7 +411,7 @@ var FuzzySearch = (function () {
                 bitvectors: _map(query_tokens, FuzzySearch.bitVector),
                 tokens_score: score_per_token,
                 fused_score: 0,
-                fused_token: FuzzySearch.bitVector(normquery)
+                fused_map: (this.score_test_fused || !this.score_per_token)?FuzzySearch.bitVector(normquery):[]
             };
 
         },

@@ -148,6 +148,10 @@
             <tr><td><strong>Disable:</strong></td><td>Very fast ! Match whole query against whole field. All character in order, score best field for each item. If your dataset have one word per item, (or one word per field) this might be the best option for you</td></tr>
         </table>
 
+        <br><br>
+        <label> <input type="checkbox" name="fused" id="fused" checked /> Enable fused score </label><br>
+        (Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war")
+
     </form>
 </p>
 
@@ -329,6 +333,12 @@
         fuzzyhound.set({
             score_per_token: $(this).is(":checked")
         })
+    });
+
+    $('#fused').change(function () {
+        fuzzyhound.set({
+            score_test_fused: $(this).is(":checked")
+        });
     })
 
 
