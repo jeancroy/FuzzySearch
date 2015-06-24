@@ -192,6 +192,15 @@ We support path (things.this.that).
 Fields = ["cliche a paris, the","john middlename doe","1977","story","boy","00-11-22"]
 ```
 
+Note: you can use the wildcard `*` to process array of objects or dictionary of objects  
+`myArray.*.property` is equivalent of
+
+    myArray.0.property
+    myArray.1.property
+    myArray.2.property
+      ...
+    myArray.N.property
+
 ### Field priority
 
 It often make send to give more weight to the title than first keyword,

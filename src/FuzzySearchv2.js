@@ -78,29 +78,28 @@ var FuzzySearch = (function () {
 
         token_query_min_length: 2,       // Avoid processing very small words, include greater or equal, in query
         token_field_min_length: 3,       // include greater or equal, in item field
-        token_query_max_length: 64,      // Shorten large token to give more predictive performance.
-        token_field_max_length: 64,      // Shorten large token to give more predictive performance.
-        token_fused_max_length: 64,      // Shorten large token to give more predictive performance.
+        token_query_max_length: 64,      // Shorten large token to give more even performance.
+        token_field_max_length: 64,      // Shorten large token to give more even performance.
+        token_fused_max_length: 32,      // Shorten large token to give more even performance.
 
-        // len(field_tok)/len(query_tok) = n/m
+        //Do not attempt to match token too different in size: n/m = len(field_tok)/len(query_tok)
         token_min_rel_size: 0.6,         // Field token should contain query token. Reject field token that are too small.
         token_max_rel_size: 6,           // Large field token tend to match against everything. Ensure query is long enough to be specific.
 
-        max_search_tokens: 10,           // Because of free word order, each search token add cost equivalent to one traversal
-                                         // additional tokens are lumped as a nth+1 token
+        max_search_tokens: 15,           //Give some control on per token cost
+                                         // additional tokens are lumped as a nth+1 token and token_query_max_length is applied
 
-        cache_fields: true,              // Collect values and normalise only once.
-                                         // This will duplicate indexed field in memory.
+        cache_fields: true,              // Collect values, split into token and normalise only once. Store processed text in memory.
 
         //
-        //  Interractive - suggest as you type.
+        //  Interactive - suggest as you type.
         //  Avoid doing search that will be discarded without being displayed
         //  This also help prevent lag/ temp freeze
         //
 
         interactive_debounce: 150,   // This is initial value. Will try to learn actual time cost. Set to 0 to disable.
         interactive_mult: 1.2,       // Overhead for variability and to allow other things to happens (like redraw, highlight ).
-        interactive_burst: 3,        // Allow short burst, prevent flicker due to debounce supress
+        interactive_burst: 3,        // Allow short burst, prevent flicker due to debounce suppression of a callback
 
 
         //
@@ -121,13 +120,17 @@ var FuzzySearch = (function () {
         keys: [""],
         results: [],
 
+        start_time:0,
+        search_time:0,
+
         sorter: function(){}
 
     };
 
-    //
-    // Size of text we can procedd in a single int
-    //
+    /**
+     * Number of bit in a int.
+     * @const
+     */
     var INT_SIZE = 32;
 
     function FuzzySearch(options) {
@@ -148,20 +151,6 @@ var FuzzySearch = (function () {
         }
 
     };
-
-
-    //Helper on array
-    function _map(array, transform, context) {
-        var i = -1;
-        var n = array.length;
-        var out = new Array(n);
-
-        while (++i < n) {
-            out[i] = transform.call(context, array[i], i, array);
-        }
-        return out;
-    }
-
 
     FuzzySearch.prototype = {
 
@@ -312,7 +301,6 @@ var FuzzySearch = (function () {
                 var group_tokens = group_info.tokens;
                 var nb_scores = group_tokens.length;
                 var single = (nb_scores==1);
-                var best = 0;
 
                 var field_tk_index = -1, score_index;
                 while (++field_tk_index < nb_tokens) {
@@ -423,7 +411,7 @@ var FuzzySearch = (function () {
                 tokens_groups: this._pack_tokens(query_tokens),
                 fused_str:fused,
                 fused_score: 0,
-                fused_map: (this.score_test_fused || !this.score_per_token)?FuzzySearch.bitVector(fused):{}
+                fused_map: (this.score_test_fused || !this.score_per_token)?FuzzySearch.alphabet(fused):{}
             };
 
         },
@@ -449,7 +437,7 @@ var FuzzySearch = (function () {
                     var token = tokens[token_index];
                     var l = token.length;
 
-                    if( l >= 32){
+                    if( l >= INT_SIZE){
 
                         large = {
                                 tokens: [token],
@@ -462,13 +450,14 @@ var FuzzySearch = (function () {
                         break;
 
                     }
-                    else if (l + offset >= 32) {
+                    else if (l + offset >= INT_SIZE) {
                         token_index--;
                         break;
                     }
                     else{
                         group_tokens.push(token);
-                        gate |= FuzzySearch.packedVector(token, group_map, offset);
+                        FuzzySearch.bitVector(token, group_map, offset);
+                        gate |= ( (1 << ( token.length - 1) ) - 1 ) << offset;
                         offset += l
                     }
 
@@ -547,26 +536,26 @@ var FuzzySearch = (function () {
             // Debounce
             var clock = (performance && performance.now) ? performance : Date;
             var timeout, cache;
-            var count = 0, supressed = false;
-
-            var later = function (query, callback) {
-                timeout = null;
-                if (supressed) {
-                    cache = self.search(query);
-                    callback(cache);
-                }
-                count = 0;
-                supressed = false;
-            };
+            var count = 0, suppressed = false;
 
             return function (query, immediate_cb, suppress_cb, finally_cb) {
 
+                var later = function () {
+                    timeout = null;
+                    if (suppressed) {
+                        cache = self.search(query);
+                        finally_cb(cache);
+                    }
+                    count = 0;
+                    suppressed = false;
+                };
+
                 clearTimeout(timeout);
-                timeout = setTimeout(later, wait, query, finally_cb);
+                timeout = setTimeout(later, wait);
 
                 if (++count < burst) {
 
-                    supressed = false;
+                    suppressed = false;
                     var before = clock.now();
                     cache = self.search(query);
                     var ret = immediate_cb(cache);
@@ -578,7 +567,7 @@ var FuzzySearch = (function () {
                     return ret;
 
                 } else {
-                    supressed = true;
+                    suppressed = true;
                     //console.log("supress");
                     return suppress_cb(cache);
                 }
@@ -804,7 +793,7 @@ var FuzzySearch = (function () {
     FuzzySearch.score = function (a, b, options) {
 
         if (options === undefined) options = _defaults;
-        var aMap = FuzzySearch.bitVector(a);
+        var aMap = FuzzySearch.alphabet(a);
 
         return FuzzySearch.score_map(a, b, aMap, options);
 
@@ -814,7 +803,7 @@ var FuzzySearch = (function () {
     // This one do not check for input
     FuzzySearch.score_map = function (a, b, aMap, options) {
 
-        var i, j, lcs_len;
+        var j, lcs_len;
         var m = a.length;
         var n = b.length;
         var bonus_prefix = options.bonus_match_start;
@@ -829,8 +818,7 @@ var FuzzySearch = (function () {
         var prefix = 0;
         if (a === b) prefix = k; //speedup equality
         else {
-            while ((a[prefix] === b[prefix]) && (++prefix < k)) {
-            }
+            while ((a[prefix] === b[prefix]) && (++prefix < k));
         }
 
         //shortest string consumed
@@ -908,7 +896,7 @@ var FuzzySearch = (function () {
 
             var query_tok = packed_tokens[k];
             var m = query_tok.length;
-            var i = -1, lcs_len, prefix;
+            var lcs_len, prefix;
 
             if(  n < min_rs*m || n > max_rs*m ){
                 scores[k] =0;
@@ -918,12 +906,13 @@ var FuzzySearch = (function () {
 
             if (query_tok === field_token)
                 prefix = lcs_len = m;
+
             else {
                 var p = (m < n) ? m : n;
                 prefix = 0;
-                while ( (query_tok[prefix] === field_token[prefix]) && (++prefix < p)) {}
-                var Sm = ( (S >>> offset) &  ( (1 << m) - 1 ) ) >>> prefix;
+                while ( (query_tok[prefix] === field_token[prefix]) && (++prefix < p));
                 lcs_len = prefix;
+                var Sm = ( (S >>> offset) &  ( (1 << m) - 1 ) ) >>> prefix;
                 while (Sm) {
                     Sm &= Sm - 1;
                     lcs_len++
@@ -940,31 +929,24 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.bitVector = function (token) {
-
-        var map = {};
-        var len = token.length;
-
-        //Large string, fallback to position by position algorithm
-        if (len > INT_SIZE) return FuzzySearch.posVector(token);
-
-        var i = -1, c;
-        while (++i < len) {
-            c = token[i];
-            if (c in map) map[c] |= (1 << i);
-            else map[c] = (1 << i);
-        }
-
-        return map;
+    FuzzySearch.mapAlphabet = function (tokens) {
+            var outlen = tokens.length;
+            var out = new Array(outlen),i=-1;
+            while(++i<outlen){
+                var t = tokens[i];
+                if (t.length > INT_SIZE) out[i] =  FuzzySearch.posVector(t);
+                else out[i] = FuzzySearch.bitVector(t,{},0);
+            }
+            return out;
     };
 
-    //
-    // Like above bitvector but allow multiple token to be packed together.
-    // Do not automatically branch to large search
-    // Return mask to gate carry bit
-    //
+    FuzzySearch.alphabet = function (token) {
+        var len = token.length;
+        if (len > INT_SIZE) return FuzzySearch.posVector(token);
+        else return FuzzySearch.bitVector(token,{},0);
+    };
 
-    FuzzySearch.packedVector = function (token, map, offset) {
+    FuzzySearch.bitVector = function (token, map, offset) {
 
         var len = token.length;
         var i = -1, c;
@@ -976,8 +958,7 @@ var FuzzySearch = (function () {
             else map[c] = (1 << b++);
         }
 
-        //Return mask of length with msb set to 0
-        return ( (1 << (len - 1) ) - 1 ) << offset
+        return  map;
 
     };
 
@@ -1558,7 +1539,7 @@ var FuzzySearch = (function () {
         }
 
 
-        var a_maps = _map(a_tokens, FuzzySearch.bitVector);
+        var a_maps = FuzzySearch.mapAlphabet(a_tokens);
         var a_tok, b_tok, a_mp;
 
         var rowmax = minimum_match, imax = -1, jmax = -1, v;
@@ -1681,7 +1662,7 @@ var FuzzySearch = (function () {
 
         var ilen = C.length;
         var jlen = C[depth].length;
-        if (jlen > 32) jlen = 32;
+        if (jlen > INT_SIZE) jlen = INT_SIZE;
 
         var j, score;
         var include_thresh = score_thresholds[depth];
@@ -1762,36 +1743,6 @@ var FuzzySearch = (function () {
     // Use to compare bloodhound, get unique set etc
     //
 
-    // 32 bit FNV-1a hash
-    // Ref.: http://isthe.com/chongo/tech/comp/fnv/
-    function fnv32a(str) {
-        var hash = 0x811c9dc5;
-        for (var i = 0; i < str.length; ++i) {
-            hash ^= str.charCodeAt(i);
-            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-        }
-        return hash >>> 0;
-    }
-
-    FuzzySearch.identify = function (item, keys) {
-        var str;
-
-        var type = Object.prototype.toString.call(keys);
-
-        if (!keys || !keys.length)
-            str = JSON.stringify(item);
-        else if (type === '[object String]')
-            str = FuzzySearch.getField(item, keys);
-        else if (type === '[object Array]')
-            str = FuzzySearch.generateFields(item, keys).join('¬');
-        else
-            str = JSON.stringify(item);
-
-        return fnv32a(str);
-
-    };
-
-
     return FuzzySearch;
 
 })();
@@ -1801,7 +1752,7 @@ var FuzzySearch = (function () {
 // Might need to swap input to match internal of a given algorithm
 //
 
-
+/*
 function lcs(a, b) {
 
     var m = a.length;
@@ -1841,4 +1792,4 @@ function lcs(a, b) {
     }
 
     return lcs.reverse().join('');
-}
+}*/
