@@ -152,6 +152,43 @@ var FuzzySearch = (function () {
 
     };
 
+    //
+    // Helper object constructor
+    //
+
+    function Query(normalized,tokens_groups,fused_str,fused_map ){
+        this.normalized=normalized;
+        this.tokens_groups=tokens_groups;
+        this.fused_str=fused_str;
+        this.fused_score=0;
+        this.fused_map=fused_map;
+    }
+
+    function PackInfo(group_tokens,group_map,gate){
+        this.tokens = group_tokens;
+        this.map = group_map;
+        this.gate = gate;
+
+        var t = group_tokens.length, i = -1;
+        var scores = new Array(t);
+        while (++i < t) scores[i] = 0;
+
+        this.score_item = scores.slice();
+        this.reset= scores;
+    }
+
+    function SearchResult(item_score, item, matched_field_index, matched_field_value,sortkey){
+        this.score = item_score;
+        this.item = item;
+        this.matchIndex = matched_field_index;
+        this.match = matched_field_value;
+        this.sortKey = sortkey;
+    }
+
+
+
+
+
     FuzzySearch.prototype = {
 
         //Allow to overwrite some options, keeping previous intact.
@@ -406,13 +443,12 @@ var FuzzySearch = (function () {
 
             var fused = norm_query.substring(0,this.token_fused_max_length);
 
-            return {
-                normalized: norm_query,
-                tokens_groups: this._pack_tokens(query_tokens),
-                fused_str:fused,
-                fused_score: 0,
-                fused_map: (this.score_test_fused || !this.score_per_token)?FuzzySearch.alphabet(fused):{}
-            };
+            return new Query(
+                norm_query,
+                this._pack_tokens(query_tokens),
+                fused,
+                (this.score_test_fused || !this.score_per_token)?FuzzySearch.alphabet(fused):{}
+            )
 
         },
 
@@ -439,13 +475,9 @@ var FuzzySearch = (function () {
 
                     if( l >= INT_SIZE){
 
-                        large = {
-                                tokens: [token],
-                                map: FuzzySearch.posVector(token),
-                                gate: 0xFFFFFFFF,
-                                score_item: [0],
-                                reset:[0]
-                            };
+                        large = new PackInfo([token],
+                            FuzzySearch.posVector(token),
+                            0xFFFFFFFF);
 
                         break;
 
@@ -463,19 +495,8 @@ var FuzzySearch = (function () {
 
                 }
 
-                var t = group_tokens.length, i = -1;
-
-                if(t>0){
-                    var scores = new Array(t);
-                    while (++i < t) scores[i] = 0;
-
-                    groups.push({
-                        "tokens": group_tokens,
-                        "map": group_map,
-                        "gate": gate,
-                        score_item: scores.slice(),
-                        reset: scores
-                    });
+                if(group_tokens.length>0){
+                    groups.push( new PackInfo(group_tokens,group_map,gate) );
                 }
 
                 if(large){
@@ -491,28 +512,29 @@ var FuzzySearch = (function () {
 
         _prepResult: function (item, item_score, matched_field_index) {
 
-            var matched = "", sk, f;
+            var matched_field_value = "", sort_key, f;
 
             if (this.recover_match) {
                 f = FuzzySearch.generateFields(item, this.keys);
-                matched = f[matched_field_index] || "";
+                matched_field_value = f[matched_field_index] || "";
             }
 
             //sorting by string without accent make the most sens
             if (this.cache_fields)
-                sk = item._fields_[0].join(" ");
+                sort_key = item._fields_[0].join(" ");
             else
-                sk = FuzzySearch.normalize(f ? f[0] : FuzzySearch.getField(item, this.keys[0]));
+                sort_key = FuzzySearch.normalize(f ? f[0] : FuzzySearch.getField(item, this.keys[0]));
 
             item_score = Math.round(item_score / this.score_round) * this.score_round;
 
-            return {
-                score: item_score,
-                item: item,
-                "matchIndex": matched_field_index,
-                "match": matched,
-                "sortKey": sk
-            }
+            return new SearchResult(
+                item_score,
+                item,
+                matched_field_index,
+                matched_field_value,
+                sort_key
+            );
+
 
 
         },
