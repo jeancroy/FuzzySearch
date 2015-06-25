@@ -8,8 +8,8 @@
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
     <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
-    <script src="../src/FuzzySearch.js"></script>
-    <script src="../src/Highlight.FS.js"></script>
+    <script src="../dist/FuzzySearch.min.js"></script>
+    <script src="../dist/Highlight.FS.min.js"></script>
 
     <style>
 
@@ -291,7 +291,7 @@
     $.ajaxSetup({cache: true});
     function setsource(url, keys) {
         $.getJSON(url).then(function (response) {
-            fuzzyhound.set({
+            fuzzyhound.setOptions({
                 source: response,
                 keys: keys
             })
@@ -331,13 +331,13 @@
     });
 
     $('#free').change(function () {
-        fuzzyhound.set({
+        fuzzyhound.setOptions({
             score_per_token: $(this).is(":checked")
         })
     });
 
     $('#fused').change(function () {
-        fuzzyhound.set({
+        fuzzyhound.setOptions({
             score_test_fused: $(this).is(":checked")
         });
     })

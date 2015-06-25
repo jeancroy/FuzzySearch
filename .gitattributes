@@ -15,3 +15,8 @@
 *.PDF	 diff=astextplain
 *.rtf	 diff=astextplain
 *.RTF	 diff=astextplain
+
+# ignore diff on minified
+*.min.js    -diff  
+*.min.css   -diff  
+

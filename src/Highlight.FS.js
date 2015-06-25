@@ -9,7 +9,15 @@
  */
 
 
-(function (FuzzySearch) {
+(function () {
+
+    var FuzzySearch;
+
+    if (typeof require === 'function') {
+        FuzzySearch = require("FuzzySearch")
+    } else {
+        FuzzySearch = window["FuzzySearch"];
+    }
 
     /**@const*/
     var INT_SIZE = 32;
@@ -508,7 +516,7 @@
      * @returns {Number} - best score
      * @private
      */
-     function _matchScoreGrid(C, match, thresholds) {
+    function _matchScoreGrid(C, match, thresholds) {
 
         var ilen = C.length;
         var i, j;
@@ -558,10 +566,6 @@
     // as a key in cache_tree (in addition to level). Ideal key would be a list of available trial
     // but, used & available are complementary vector (~not operation) so used is a perfeclty valid key too...
 
-    function MatchTryout(score,index){
-        this.score = score;
-        this.index = index;
-    }
 
     /**
      * Branch out to try each permutation of items of A against item of B.
@@ -577,7 +581,7 @@
      * @returns {number} score
      * @private
      */
-    function _buildScoreTree (C, cache_tree, used_mask, depth, score_thresholds) {
+    function _buildScoreTree(C, cache_tree, used_mask, depth, score_thresholds) {
 
         var ilen = C.length;
         var jlen = C[depth].length;
@@ -637,6 +641,17 @@
     }
 
     /**
+     *
+     * @param score
+     * @param index
+     * @constructor
+     */
+    function MatchTryout(score, index) {
+        this.score = score;
+        this.index = index;
+    }
+
+    /**
      * Let A,B be two array
      * Input is an array that map "index of A"->"index of B"
      * Output is the reverse "index of B"->"index of A"
@@ -648,7 +663,7 @@
      * @private
      */
 
-     function _flipmatch (match, newlen) {
+    function _flipmatch(match, newlen) {
 
         var i, j;
         var ref = match.slice();
@@ -665,4 +680,4 @@
 
     }
 
-})(FuzzySearch);
+})();
