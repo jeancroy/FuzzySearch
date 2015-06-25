@@ -8,8 +8,8 @@
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
     <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
-    <!--script src="typeahead.jquery.js"></script-->
     <script src="../src/FuzzySearch.js"></script>
+    <script src="../src/Highlight.FS.js"></script>
 
     <style>
 
@@ -149,6 +149,10 @@
             <tr><td><strong>Disable:</strong></td><td>Very fast ! Match whole query against whole field. All character in order, score best field for each item. If your dataset have one word per item, (or one word per field) this might be the best option for you</td></tr>
         </table>
 
+        <br><br>
+        <label> <input type="checkbox" name="fused" id="fused" checked /> Enable fused score </label><br>
+        (Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war")
+
     </form>
 </p>
 
@@ -211,7 +215,7 @@
         return "<div class='typeahead-footer'> " +
                 "Search took <strong>" + fuzzyhound.search_time.toFixed(3) + " ms</strong><br>" +
                 "Total (search+highlight+render):  <strong>" + (render_end - fuzzyhound.start_time).toFixed(3) + " ms</strong><br>" +
-                "Query: <strong>" + fuzzyhound.query.normalized.length + "</strong> chars in <strong>" + fuzzyhound.query.tokens.length + "</strong> tokens <br>" +
+                "Query: <strong>" + fuzzyhound.query.normalized.length + "</strong> chars <br>" +
                 "Source contain " + fuzzyhound.source.length + " Items<br>" +
                 "</div>";
     }
@@ -330,6 +334,12 @@
         fuzzyhound.set({
             score_per_token: $(this).is(":checked")
         })
+    });
+
+    $('#fused').change(function () {
+        fuzzyhound.set({
+            score_test_fused: $(this).is(":checked")
+        });
     })
 
 

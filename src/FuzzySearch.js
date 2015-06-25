@@ -8,34 +8,15 @@
  * http://opensource.org/licenses/MIT
  */
 
-
-//
-// Search a query across multiple item
-//
-// Each item has one or multiple fields.
-// Query is split into tokens (words)
-// Field are split into tokens.
-//
-// Query can match using free word order
-// "paint my wall" -> "wall painting"
-// (bonus is given for proper word order)
-//
-// Query can match across diferent field
-// "Davinci Brown" -> item.title = "davinci code", item.author="dawn brown"
-// (score is better for match in the same field)
-//
-// Score take field position into account.
-// For example one can give preference to title over author
-// Author over keyword1, keyword1 over keyword 2 and so on.
-// (Position bonus fade exponentially so bonus between 1 and 2
-// is far greater than bonus between 21 and 22)
-//
-
-
-var FuzzySearch = (function () {
+(function (global) {
     'use strict';
 
-    var _defaults = {
+    function FuzzySearch(options) {
+        if (options === undefined) options = {};
+        FuzzySearch.setup(this, FuzzySearch.defaultOptions, options)
+    }
+
+    FuzzySearch.defaultOptions = {
 
         //
         //  Scoring, include in result
@@ -54,9 +35,9 @@ var FuzzySearch = (function () {
         bonus_token_order: 2.0,          // Value of two token properly ordered
         bonus_position_decay: 0.7,       // Exponential decay for position bonus (smaller : more importance to first item)
 
-        score_per_token:true,            // if true, split query&field in token, allow to match in different order
-                                         // if false, bypass at least half the computation cost, very fast
-                                         // also disable different token that score different field, because no more token!!
+        score_per_token: true,            // if true, split query&field in token, allow to match in different order
+                                          // if false, bypass at least half the computation cost, very fast
+                                          // also disable different token that score different field, because no more token!!
 
         score_test_fused: true,           // Try one extra match where we disregard token separation.
                                           // "oldman" match "old man"
@@ -78,37 +59,25 @@ var FuzzySearch = (function () {
 
         token_query_min_length: 2,       // Avoid processing very small words, include greater or equal, in query
         token_field_min_length: 3,       // include greater or equal, in item field
-        token_max_length: 64,            // Shorten large token to give more predictive performance.
+        token_query_max_length: 64,      // Shorten large token to give more even performance.
+        token_field_max_length: 64,      // Shorten large token to give more even performance.
+        token_fused_max_length: 32,      // Shorten large token to give more even performance.
 
-        // len(field_tok)/len(query_tok) = n/m
+        //Do not attempt to match token too different in size: n/m = len(field_tok)/len(query_tok)
         token_min_rel_size: 0.6,         // Field token should contain query token. Reject field token that are too small.
         token_max_rel_size: 6,           // Large field token tend to match against everything. Ensure query is long enough to be specific.
 
-        max_search_tokens: 10,           // Because of free word order, each search token add cost equivalent to one traversal
-                                         // additional tokens are lumped as a nth+1 token
-
-        cache_fields: true,              // Collect values and normalise only once.
-                                         // This will duplicate indexed field in memory.
 
         //
-        //  Interractive - suggest as you type.
+        //  Interactive - suggest as you type.
         //  Avoid doing search that will be discarded without being displayed
         //  This also help prevent lag/ temp freeze
         //
 
         interactive_debounce: 150,   // This is initial value. Will try to learn actual time cost. Set to 0 to disable.
         interactive_mult: 1.2,       // Overhead for variability and to allow other things to happens (like redraw, highlight ).
-        interactive_burst: 3,        // Allow short burst, prevent flicker due to debounce supress
+        interactive_burst: 3,        // Allow short burst, prevent flicker due to debounce suppression of a callback
 
-
-        //
-        //  Highlight
-        //
-
-        highlight_prefix: false,         // true: force prefix as part of highlight, (false: minimum gap, slower)
-        highlight_bridge_gap: 2,         // display small gap as substitution, set to size of gap, 0 to disable
-        highlight_before: '<strong class="highlight">',  //tag to put before/after the highlight
-        highlight_after: '</strong>',
 
         //
         //  Default empty source / keys.
@@ -116,50 +85,116 @@ var FuzzySearch = (function () {
         //
 
         source: [],
+        index: [],
         keys: [""],
-        results: []
+        results: [],
 
+        start_time: 0,
+        search_time: 0,
+
+        sorter: null
     };
 
-    //
-    // Javascript use int of 32 bit,
-    // we need one extra bit to prevent overflow so 31.
-    //
-    // Trick: set this to 0 and program will use alternate
-    // "long string" H09 algorithm for everything.
-    //
-    var BV_MAX_SIZE = 31;
+    /**
+     * Number of bit in a int.
+     * @const
+     */
+    var INT_SIZE = 32;
 
-    function FuzzySearch(options) {
-        if (options === undefined) options = {};
-        FuzzySearch.setup(this, _defaults, options)
-    }
+    FuzzySearch.setup = function (self, defaults, options) {
 
-    FuzzySearch.defaultOptions = _defaults;
-
-    FuzzySearch.setup = function (item, defaults, options) {
+        var oSource = self.source;
 
         // Copy key of options that are also in default
         // If key not in options, add from defaults.
         for (var key in defaults) {
             if (defaults.hasOwnProperty(key)) {
-                item[key] = (key in options) ? options[key] : defaults[key];
+                self[key] = (key in options) ? options[key] : defaults[key];
             }
+        }
+
+        if (self.source !== oSource) {
+            FuzzySearch.addSource(self, self.source, true);
         }
 
     };
 
+    FuzzySearch.addSource = function (self, source, overwrite) {
 
-    //Helper on array
-    function _map(array, transform, context) {
-        var i = -1;
-        var n = array.length;
-        var out = new Array(n);
+        var nb_items = source.length, out_index;
 
-        while (++i < n) {
-            out[i] = transform.call(context, array[i], i, array);
+        if (overwrite) {
+            self.index = new Array(nb_items);
+            out_index = 0
+        } else
+            out_index = nb_items;
+
+        var index = self.index;
+        var min_size = self.token_field_min_length;
+        var max_size = self.token_field_max_length;
+
+        for (var item_index = -1; ++item_index < nb_items;) {
+
+            var item = source[item_index];
+            var item_fields = FuzzySearch.generateFields(item, self.keys);
+
+            var nb_fields = item_fields.length;
+            var fields = new Array(nb_fields);
+
+            for (var field_index = -1; ++field_index < nb_fields;) {
+                fields[field_index] = FuzzySearch.filterSize(FuzzySearch.normalize(item_fields[field_index]).split(" "), min_size, max_size);
+            }
+
+            index[out_index++] = new Indexed(item, fields);
+
         }
-        return out;
+
+        return self;
+
+    };
+
+
+    //
+    // Helper object constructor
+    //
+
+    function Query(normalized, tokens_groups, fused_str, fused_map) {
+        this.normalized = normalized;
+        this.tokens_groups = tokens_groups;
+        this.fused_str = fused_str;
+        this.fused_score = 0;
+        this.fused_map = fused_map;
+    }
+
+    function PackInfo(group_tokens, group_map, gate) {
+        this.tokens = group_tokens;
+        this.map = group_map;
+        this.gate = gate;
+
+        var t = group_tokens.length, i = -1;
+        var scores = new Array(t);
+        while (++i < t) scores[i] = 0;
+
+        this.score_item = scores.slice();
+        this.reset = scores;
+    }
+
+    function SearchResult(item_score, item, matched_field_index, matched_field_value, sortkey) {
+        this.score = item_score;
+        this.item = item;
+        this.matchIndex = matched_field_index;
+        this.match = matched_field_value;
+        this.sortKey = sortkey;
+    }
+
+    function Indexed(original, fields) {
+        this.item = original;
+        this.fields = fields;
+    }
+
+    function Block(start, end) {
+        this.start = start;
+        this.end = end;
     }
 
 
@@ -178,42 +213,48 @@ var FuzzySearch = (function () {
             var time_start = clock.now();
             this.start_time = time_start;
 
-            var query = this.query = this._prepQuery(querystring);
-            var score_init = query.tokens_score.slice();
-
-            var thresh_include = this.thresh_include;
-            var best_item_score = 0;
-            var results = [];
-
-            var source_index = -1, source_len = this.source.length;
-
             var opt_bpd = this.bonus_position_decay;
             var opt_fge = this.field_good_enough;
             var opt_trb = this.thresh_relative_to_best;
             var opt_score_tok = this.score_per_token;
 
-            while (++source_index < source_len) {
+            var query = this.query = this._prepQuery(querystring);
+
+            var thresh_include = this.thresh_include;
+            var best_item_score = 0;
+            var results = [];
+
+            var source = this.index;
+            for (var item_index = -1, nb_items = source.length; ++item_index < nb_items;) {
 
                 var item_score = 0;
                 var matched_field_index = -1;
                 var position_bonus = 1.0;
 
+                //
                 //reset best kw score
-                query.tokens_score = score_init.slice();
+                //
+                var groups = query.tokens_groups;
+
+                for (var group_index = -1, nb_groups = groups.length; ++group_index < nb_groups;) {
+                    var grp = groups[group_index];
+                    grp.score_item = grp.reset.slice();
+                }
+
                 query.fused_score = 0;
 
-                //get indexed fields
-                var item = this.source[source_index];
-                var item_fields = this._getFields(item);
 
-                var field_index = -1, fields_len = item_fields.length;
-                while (++field_index < fields_len) {
+                //get indexed fields
+                var item = source[item_index];
+                var item_fields = item.fields;
+
+                for (var field_index = -1, nb_fields = item_fields.length; ++field_index < nb_fields;) {
 
                     var field_score;
-                    if(opt_score_tok)
+                    if (opt_score_tok)
                         field_score = this._scoreField(item_fields[field_index], query);
                     else
-                        field_score = FuzzySearch.score_map(query.normalized,item_fields[field_index].join(" "),query.fused_map,this.bonus_match_start);
+                        field_score = FuzzySearch.score_map(query.fused_str, item_fields[field_index].join(" "), query.fused_map, this);
 
                     field_score *= (1.0 + position_bonus);
                     position_bonus *= opt_bpd;
@@ -227,19 +268,17 @@ var FuzzySearch = (function () {
 
                 }
 
-                var nbtokens = query.tokens.length;
-                if(opt_score_tok /*&& nbtokens>1*/) {
 
-                    // Mix best field score (all keyword in one field)
-                    // with best keyword score (all keyword any field)
+                if (opt_score_tok) {
+
                     var query_score = 0;
-                    var score_per_token = query.tokens_score;
-                    var i = -1;
-                    while (++i < nbtokens) {
-                        query_score += score_per_token[i]
+                    for (group_index = -1; ++group_index < nb_groups;) {
+                        var group_scores = groups[group_index].score_item;
+                        for (var j = -1, nb_scores = group_scores.length; ++j < nb_scores;) {
+                            query_score += group_scores[j]
+                        }
                     }
 
-                    //individual tokens or fused togheter ?
                     if (query.fused_score > query_score) query_score = query.fused_score;
                     item_score = 0.5 * item_score + 0.5 * query_score;
 
@@ -255,23 +294,29 @@ var FuzzySearch = (function () {
 
                 //candidate for best result ? push to list
                 if (item_score > thresh_include) {
-                    results.push(this._prepResult(item, item_score, matched_field_index));
+
+                    item_score = Math.round(item_score / this.score_round) * this.score_round;
+
+                    results.push(new SearchResult(
+                        item_score,
+                        item.item,
+                        matched_field_index,
+                        item_fields[matched_field_index].join(" "),
+                        item_fields[0].join(" ")
+                    ));
+
                 }
 
 
             }
 
             //keep only results that are good enough compared to best
-            results = FuzzySearch.filterGT(results, "score", thresh_include);
+            results = FuzzySearch.filterGTE(results, "score", thresh_include);
 
             // sort by decreasing order of score
             // equal rounded score: alphabetical order
-            results = results.sort(function (a, b) {
-                var d = b.score - a.score;
-                if( d!==0) return d;
-                var ak = a.sortKey, bk = b.sortKey;
-                return ak > bk ? 1 : ( ak < bk ? -1 : 0);
-            });
+            if(this.sorter)
+                results = results.sort(this.sorter);
 
             if (this.output_map.length || this.output_limit > 0) {
                 results = FuzzySearch.mapField(results, this.output_map, this.output_limit);
@@ -286,72 +331,81 @@ var FuzzySearch = (function () {
 
         _scoreField: function (field_tokens, query) {
 
-            var query_tokens = query.tokens;
-            var query_bitvectors = query.bitvectors;
-            var best_score_any_field = query.tokens_score;
-            var bonus_match_start = this.bonus_match_start;
-            var bonus_token_order = this.bonus_token_order;
+            var groups = query.tokens_groups;
+            var nb_groups = groups.length;
+            var nb_tokens = field_tokens.length;
+            var field_score = 0, sc;
+            var last_index = -1;
+
+            var bonus_order = this.bonus_token_order;
             var minimum_match = this.minimum_match;
-            var min_rs = this.token_min_rel_size;
-            var max_rs = this.token_max_rel_size;
 
-            var field_score = 0;
-            var query_tokens_len = query_tokens.length;
-            var field_tokens_len = field_tokens.length;
 
-            // we allow free word ordering
-            // but give bonus for proper token order
-            var last_match_pos = -1;
-            var query_index = -1;
-            while (++query_index < query_tokens_len) {
+            var token, scores;
+            for (var group_index = -1; ++group_index < nb_groups;) {
 
-                var query_tk = query_tokens[query_index];
-                var query_tk_bv = query_bitvectors[query_index];
-                var best_score_this_field = 0;
-                var m = query_tk.length;
+                var group_info = groups[group_index];
 
-                //for token order bonus
-                var current_match_pos = -1;
+                var best_match_this_field = group_info.reset.slice();
+                var best_match_index = group_info.reset.slice();
 
-                //for each search token, find the best matching item token
-                var tok_index = -1;
-                while (++tok_index < field_tokens_len) {
+                var group_tokens = group_info.tokens;
+                var nb_scores = group_tokens.length;
+                var single = (nb_scores == 1);
 
-                    var field_tk = field_tokens[tok_index];
-                    var n = field_tk.length;
+                var score_index;
+                for (var field_tk_index = -1; ++field_tk_index < nb_tokens;) {
 
-                    if(   n < min_rs*m || n > max_rs*m ) continue;
+                    token = field_tokens[field_tk_index];
 
-                    var test_score = FuzzySearch.score_map(query_tk, field_tk, query_tk_bv, bonus_match_start);
+                    if (single) {
+                        sc = FuzzySearch.score_map(group_tokens[0], token, group_info.map, this);
+                        if (sc > best_match_this_field[0]) {
+                            best_match_this_field[0] = sc;
+                            best_match_index[0] = field_tk_index;
+                        }
 
-                    //each query token is matched against it's best field token
-                    if (test_score > best_score_this_field) {
-                        best_score_this_field = test_score;
-                        current_match_pos = tok_index;
+                    }
+                    else {
+
+                        scores = FuzzySearch.score_pack(group_info, token, this);
+                        for (score_index = -1; ++score_index < nb_scores;) {
+                            sc = scores[score_index];
+                            if (sc > best_match_this_field[score_index]) {
+                                best_match_this_field[score_index] = sc;
+                                best_match_index[score_index] = field_tk_index;
+                            }
+                        }
+
                     }
 
                 }
 
-                //each search token keep a best overall match across all item field
-                if (best_score_this_field > best_score_any_field[query_index]) {
-                    best_score_any_field[query_index] = best_score_this_field;
+                var best_match_this_item = group_info.score_item;
+                for (score_index = -1; ++score_index < nb_scores;) {
+
+                    sc = best_match_this_field[score_index];
+                    field_score += sc;
+
+                    if (sc > best_match_this_item[score_index])
+                        best_match_this_item[score_index] = sc;
+
+                    // if search token are ordered inside subject give a bonus
+                    // only consider non empty match for bonus
+                    if (sc > minimum_match) {
+                        var tmp = best_match_index[score_index];
+                        if (tmp > last_index) field_score += bonus_order;
+                        last_index = tmp;
+                    }
+
                 }
 
-                // if search token are ordered inside subject give a bonus
-                // only consider non empty match for bonus
-                if (best_score_this_field > minimum_match) {
-                    if (current_match_pos > last_match_pos)  best_score_this_field += bonus_token_order;
-                    last_match_pos = current_match_pos;
-                }
-
-                //item score is the sum of each search token score
-                field_score += best_score_this_field;
 
             }
 
-            if(this.score_test_fused){
+            if (this.score_test_fused) {
                 // test "space bar is broken" no token match
-                var fused_score = FuzzySearch.score_map(query.normalized, field_tokens.join(" "), query.fused_map, bonus_match_start);
+                var fused_score = FuzzySearch.score_map(query.fused_str, field_tokens.join(" "), query.fused_map, this);
                 field_score = fused_score > field_score ? fused_score : field_score;
 
                 if (fused_score > query.fused_score) {
@@ -359,88 +413,23 @@ var FuzzySearch = (function () {
                 }
             }
 
+
             return field_score;
 
         },
 
-        _getFields: function (item) {
-
-            var item_fields;
-
-            if (this.cache_fields && item._fields_) {
-                item_fields = item._fields_;
-            }
-            else {
-                item_fields = FuzzySearch.generateFields(item, this.keys);
-                //Possible speedup: single loop to normalize & tokenize instead of two map.
-                item_fields = _map(item_fields, FuzzySearch.normalize);
-                item_fields = _map(item_fields, this._tokenize, this);
-                if (this.cache_fields) item._fields_ = item_fields;
-            }
-
-            return item_fields;
-        },
-
-        _tokenize: function (str) {
-            return FuzzySearch.filterSize(str.split(" "), this.token_field_min_length, this.token_max_length);
-        },
-
         _prepQuery: function (querystring) {
 
-            var normquery = FuzzySearch.normalize(querystring);
-            var query_tokens = FuzzySearch.filterSize(normquery.split(" "), this.token_query_min_length, this.token_max_length);
+            var norm_query = FuzzySearch.normalize(querystring);
+            var query_tokens = FuzzySearch.filterSize(norm_query.split(" "), this.token_query_min_length, this.token_query_max_length);
+            var fused = norm_query.substring(0, this.token_fused_max_length);
 
-            // lump tokens after max_search_tokens
-            // if only one extra, it's already lumped
-            var maxtksz = this.max_search_tokens;
-            if (query_tokens.length > maxtksz + 1) {
-                var extra = query_tokens.splice(maxtksz).join(" ");
-                query_tokens.push(extra);
-            }
-
-            //reset best score
-            var score_per_token = [];
-            var query_tk_len = query_tokens.length, i = -1;
-            while (++i < query_tk_len) {
-                score_per_token[i] = -1;
-            }
-
-            return {
-                normalized: normquery,
-                tokens: query_tokens,
-                bitvectors: _map(query_tokens, FuzzySearch.bitVector),
-                tokens_score: score_per_token,
-                fused_score: 0,
-                fused_map: (this.score_test_fused || !this.score_per_token)?FuzzySearch.bitVector(normquery):[]
-            };
-
-        },
-
-        _prepResult: function (item, item_score, matched_field_index) {
-
-            var matched="", sk, f;
-
-            if (this.recover_match) {
-                f = FuzzySearch.generateFields(item, this.keys);
-                matched = f[matched_field_index] || "";
-            }
-
-            //sorting by string without accent make the most sens
-            if(this.cache_fields)
-                sk = item._fields_[0].join(" ");
-            else
-                sk = FuzzySearch.normalize( f?f[0] : FuzzySearch.getField(item, this.keys[0]) );
-
-            item_score = Math.round(item_score / this.score_round) * this.score_round;
-
-            return {
-                score: item_score,
-                item: item,
-                "matchIndex": matched_field_index,
-                "match": matched,
-                "sortKey": sk
-            }
-
+            return new Query(
+                norm_query,
+                FuzzySearch.pack_tokens(query_tokens),
+                fused,
+                (this.score_test_fused || !this.score_per_token) ? FuzzySearch.alphabet(fused) : {}
+            )
 
         },
 
@@ -463,26 +452,26 @@ var FuzzySearch = (function () {
             // Debounce
             var clock = (performance && performance.now) ? performance : Date;
             var timeout, cache;
-            var count = 0, supressed = false;
-
-            var later = function (query, callback) {
-                timeout = null;
-                if (supressed) {
-                    cache = self.search(query);
-                    callback(cache);
-                }
-                count = 0;
-                supressed = false;
-            };
+            var count = 0, suppressed = false;
 
             return function (query, immediate_cb, suppress_cb, finally_cb) {
 
+                var later = function () {
+                    timeout = null;
+                    if (suppressed) {
+                        cache = self.search(query);
+                        finally_cb(cache);
+                    }
+                    count = 0;
+                    suppressed = false;
+                };
+
                 clearTimeout(timeout);
-                timeout = setTimeout(later, wait, query, finally_cb);
+                timeout = setTimeout(later, wait);
 
                 if (++count < burst) {
 
-                    supressed = false;
+                    suppressed = false;
                     var before = clock.now();
                     cache = self.search(query);
                     var ret = immediate_cb(cache);
@@ -494,7 +483,7 @@ var FuzzySearch = (function () {
                     return ret;
 
                 } else {
-                    supressed = true;
+                    suppressed = true;
                     //console.log("supress");
                     return suppress_cb(cache);
                 }
@@ -506,7 +495,8 @@ var FuzzySearch = (function () {
         __ttAdapter: function ttAdapter() {
 
             var debounced = this.getInteractive();
-            var noop = function (a) { };
+            var noop = function (a) {
+            };
             return function (query, sync, async) {
                 debounced(query, sync, noop, async);
             }
@@ -533,6 +523,17 @@ var FuzzySearch = (function () {
         });
     };
 
+    /**
+     * this is default sort function
+     */
+
+    FuzzySearch.compareResults = FuzzySearch.defaultOptions.sorter = function (a, b) {
+        var d = b.score - a.score;
+        if (d !== 0) return d;
+        var ak = a.sortKey, bk = b.sortKey;
+        return ak > bk ? 1 : ( ak < bk ? -1 : 0);
+    };
+
     FuzzySearch.generateFields = function (obj, fieldlist) {
 
         if (!fieldlist.length) return [obj.toString()];
@@ -545,19 +546,10 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.getField = function (obj, field) {
-
-        if (!field.length) return obj.toString();
-
-        var indexed_fields = [];
-        FuzzySearch._collectValues(obj, field.split("."), indexed_fields, 0);
-        return indexed_fields[0] || "";
-
-    };
 
     FuzzySearch._collectValues = function (obj, parts, list, level) {
 
-        var key, i,olen;
+        var key, i, olen;
         var nb_level = parts.length;
         while (level < nb_level) {
 
@@ -577,8 +569,8 @@ var FuzzySearch = (function () {
         if (level === nb_level) {
 
             if (isArray) {
-                olen = obj.length; i=-1;
-                while (++i < olen) {
+                olen = obj.length;
+                for (i = -1; ++i < olen;) {
                     list.push(obj[i].toString())
                 }
             }
@@ -599,8 +591,8 @@ var FuzzySearch = (function () {
 
             level++;
             if (isArray) {
-                olen = obj.length; i=-1;
-                while (++i < olen) {
+                olen = obj.length;
+                for (i = -1; ++i < olen;) {
                     FuzzySearch._collectValues(obj[i], parts, list, level);
                 }
             }
@@ -616,6 +608,7 @@ var FuzzySearch = (function () {
 
         return list;
     };
+
 
     FuzzySearch.filterSize = function (array, minSize, maxSize) {
         var i = -1, j = -1;
@@ -636,34 +629,31 @@ var FuzzySearch = (function () {
         return out;
     };
 
-    FuzzySearch.mapField = function (source, path, limit) {
+    FuzzySearch.mapField = function (source, path, max_out) {
 
         var n = source.length;
-        if (limit > 0 && limit < n) n = limit;
+        if (max_out > 0 && max_out < n) n = max_out;
         if (path == "") return source.slice(0, n);
 
         var out = new Array(n);
-        var i = -1;
-        var obj;
+        var obj, i;
 
         if (path.indexOf(".") === -1) {
-
             //fast case no inner loop
-            while (++i < n) {
+            for (i = -1;++i < n;) {
                 obj = source[i];
                 if (path in obj) out[i] = obj[path];
             }
 
         } else {
 
-            //genaral case
+            //general case
             var parts = path.split(".");
             var nb_level = parts.length;
             obj = source[i];
 
-            while (++i < n) {
-                var level = -1;
-                while (++level < nb_level) {
+            for (i=-1;++i < n;) {
+                for ( var level = -1;++level < nb_level;) {
                     var key = parts[level];
                     if (!(key in obj)) break;
                     obj = obj[key];
@@ -676,8 +666,7 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.filterGT = function (array, field, compareto) {
-
+    FuzzySearch.filterGTE = function (array, field, compareto) {
         var i = -1, j = -1;
         var n = array.length;
         var out = [], obj;
@@ -693,6 +682,11 @@ var FuzzySearch = (function () {
     };
 
 
+    //-----------------------------
+    //       SCORING FUNCTIONS
+    // ---------------------------
+
+
     // Adapted from paper:
     // A fast and practical bit-vector algorithm for
     // the Longest Common Subsequence problem
@@ -702,21 +696,6 @@ var FuzzySearch = (function () {
     // Bit-parallel LCS-length computation revisited (H Hyyrö, 2004)
     // http://www.sis.uta.fi/~hh56766/pubs/awoca04.pdf
     //
-    // Precalculate aMap to search a in mulitple b
-    // aMap = FuzzySearch.bitvector(a)
-    //
-    // Length of LCS (LLCS) is related to edit distance by
-    //       2×LLCS(A, B)= n + m − ed(A, B)
-    //
-    // where ed is the simple edit distance (only insertion and deletion)
-    // and m, n are size of A and B.
-    //
-    // length of lcs is then compared
-    // to length of both a and b to make a score
-    // this, togheter with bonus_prefix give a score
-    // similar in idea to a Jaro–Winkler score
-    //
-
 
     FuzzySearch.prototype.score = function (a, b) {
         return FuzzySearch.score(a, b, this)
@@ -724,28 +703,23 @@ var FuzzySearch = (function () {
 
     FuzzySearch.score = function (a, b, options) {
 
-        if (options === undefined) options = _defaults;
+        if (options === undefined) options = FuzzySearch.defaultOptions;
+        var aMap = FuzzySearch.alphabet(a);
 
-        //do as much work as possible in as bit-parallel computation
-        if (b.length > a.length && b.length < BV_MAX_SIZE) {
-            var tmp = a; a = b; b = tmp;
-        }
-
-        var aMap = FuzzySearch.bitVector(a);
-        return FuzzySearch.score_map(a, b, aMap, options.bonus_match_start);
+        return FuzzySearch.score_map(a, b, aMap, options);
 
     };
 
-    // Main score function
-    // This one do not check for input
-    FuzzySearch.score_map = function (a, b, aMap, bonus_prefix) {
+    // Main score function for single item
+    FuzzySearch.score_map = function (a, b, aMap, options) {
 
-        var i, j, lcs_len;
+        var j, lcs_len;
         var m = a.length;
         var n = b.length;
+        var bonus_prefix = options.bonus_match_start;
 
         var k = m < n ? m : n;
-        if (k === 0) return 0;
+        if (k === 0 || n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
 
         //normalize score against length of both inputs
         var sz_score = (m + n) / ( 2.0 * m * n);
@@ -754,7 +728,7 @@ var FuzzySearch = (function () {
         var prefix = 0;
         if (a === b) prefix = k; //speedup equality
         else {
-            while ( (a[prefix] === b[prefix]) && (++prefix < k) ){}
+            while ((a[prefix] === b[prefix]) && (++prefix < k));
         }
 
         //shortest string consumed
@@ -765,7 +739,7 @@ var FuzzySearch = (function () {
 
         //alternative algorithm for large string
         //need to keep this condition in sync with bitvector
-        if (m > BV_MAX_SIZE) {
+        if (m > INT_SIZE) {
             lcs_len = FuzzySearch.llcs_large(a, b, aMap, prefix);
             return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
         }
@@ -773,10 +747,10 @@ var FuzzySearch = (function () {
         var mask = ( 1 << m ) - 1;
         var S = mask, U, c;
 
-        j = prefix-1;
+        j = prefix - 1;
         while (++j < n) {
             c = b[j];
-            if( c in aMap ) {
+            if (c in aMap) {
                 // Hyyrö, 2004 S=V'=~V
                 U = S & aMap[c];
                 S = (S + U) | (S - U);
@@ -795,31 +769,173 @@ var FuzzySearch = (function () {
         S = (S & 0x33333333) + ((S >> 2) & 0x33333333);
         lcs_len = (((S + (S >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 
-        //lcs_len = 0;
-        //while (S){ S &= S - 1 ; lcs_len++ }
-
         lcs_len += prefix;
         return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
 
     };
 
-    FuzzySearch.bitVector = function (token) {
+    // Apply above score function for a list of parralel query
+    // ZM gard the independent scoring
+    FuzzySearch.score_pack = function (packinfo, field_token, options) {
 
-        var map = {};
+        var packed_tokens = packinfo.tokens;
+        var nb_packed = packed_tokens.length;
+
+        var S = 0xFFFFFFFF, U, c;
+        var ZM = packinfo.gate | 0;
+        var aMap = packinfo.map;
+
+        var n = field_token.length, j = -1;
+
+        while (++j < n) {
+            c = field_token[j];
+            if (c in aMap) {
+                U = S & aMap[c];
+                S = ( (S & ZM) + (U & ZM) ) | (S - U);
+            }
+        }
+
+        S = ~S;
+
+        var k = -1;
+        var offset = 0;
+        var bonus_prefix = options.bonus_match_start;
+        var min_rs = options.token_min_rel_size;
+        var max_rs = options.token_max_rel_size;
+        var scores = new Array(nb_packed);
+
+        while (++k < nb_packed) {
+
+            var query_tok = packed_tokens[k];
+            var m = query_tok.length;
+            var lcs_len, prefix;
+
+            if (n < min_rs * m || n > max_rs * m) {
+                scores[k] = 0;
+                offset += m;
+                continue;
+            }
+
+            if (query_tok === field_token)
+                prefix = lcs_len = m;
+
+            else {
+                var p = (m < n) ? m : n;
+                prefix = 0;
+                while ((query_tok[prefix] === field_token[prefix]) && (++prefix < p));
+                lcs_len = prefix;
+                var Sm = ( (S >>> offset) & ( (1 << m) - 1 ) ) >>> prefix;
+                while (Sm) {
+                    Sm &= Sm - 1;
+                    lcs_len++
+                }
+            }
+
+            offset += m;
+            var sz = (m + n) / ( 2.0 * m * n);
+            scores[k] = sz * lcs_len * lcs_len + bonus_prefix * prefix;
+
+        }
+
+        return scores;
+
+    };
+
+    //
+    // Prepare query for search
+    //
+
+    FuzzySearch.pack_tokens = function (tokens) {
+
+        var token_index = -1;
+        var nb_tokens = tokens.length;
+        var large;
+        var groups = [];
+
+        //For each group
+        while (token_index < nb_tokens) {
+
+            var group_tokens = [];
+            var group_map = {};
+            var offset = 0;
+            var gate = 0;
+
+            //For each token in the group
+            while (++token_index < nb_tokens) {
+
+                var token = tokens[token_index];
+                var l = token.length;
+
+                if (l >= INT_SIZE) {
+
+                    large = new PackInfo([token],
+                        FuzzySearch.posVector(token),
+                        0xFFFFFFFF);
+
+                    break;
+
+                }
+                else if (l + offset >= INT_SIZE) {
+                    token_index--;
+                    break;
+                }
+                else {
+                    group_tokens.push(token);
+                    FuzzySearch.bitVector(token, group_map, offset);
+                    gate |= ( (1 << ( token.length - 1) ) - 1 ) << offset;
+                    offset += l
+                }
+
+            }
+
+            if (group_tokens.length > 0) {
+                groups.push(new PackInfo(group_tokens, group_map, gate));
+            }
+
+            if (large) {
+                groups.push(large);
+                large = null;
+            }
+
+        }
+
+        return groups;
+
+    };
+
+    FuzzySearch.mapAlphabet = function (tokens) {
+        var outlen = tokens.length;
+        var out = new Array(outlen), i = -1;
+        while (++i < outlen) {
+            var t = tokens[i];
+            if (t.length > INT_SIZE) out[i] = FuzzySearch.posVector(t);
+            else out[i] = FuzzySearch.bitVector(t, {}, 0);
+        }
+        return out;
+    };
+
+    FuzzySearch.alphabet = function (token) {
         var len = token.length;
+        if (len > INT_SIZE) return FuzzySearch.posVector(token);
+        else return FuzzySearch.bitVector(token, {}, 0);
+    };
 
-        //Large string, fallback to position by position algorithm
-        if (len > BV_MAX_SIZE) return FuzzySearch.posVector(token);
+    FuzzySearch.bitVector = function (token, map, offset) {
 
-        var i=-1, c;
+        var len = token.length;
+        var i = -1, c;
+        var b = offset;
+
         while (++i < len) {
             c = token[i];
-            if(c in map) map[c] |= (1 << i);
-            else map[c] = (1 << i);
+            if (c in map) map[c] |= (1 << b++);
+            else map[c] = (1 << b++);
         }
 
         return map;
+
     };
+
 
     //
     // Similar as bitvector but position is recorded as an integer in an array
@@ -828,9 +944,9 @@ var FuzzySearch = (function () {
 
     FuzzySearch.posVector = function (pattern) {
 
-        var map = {},c;
+        var map = {}, c;
 
-        var  m = pattern.length, i = -1;
+        var m = pattern.length, i = -1;
         while (++i < m) {
             c = pattern[i];
             if (c in map) map[c].push(i);
@@ -857,11 +973,6 @@ var FuzzySearch = (function () {
     // We fill the dynamic programing table line per line
     // but instead of storing the whole line we only store position where the line increase
     // ( bitvector algorythm store increase yes/no as a bit) this time we will store sequence
-    // of one or more consecutive increase.
-    //
-    // This allow to take advantage of common substring. For example "sur" in "surgery" vs "gsurvey".
-    // One the block is formed it'll act as a single unit for the rest of computation.
-    // The algorithm also take advantage of region without matches by not registering block at those region.
     //
     //    s u r g e r y
     // g [0,0,0,1,1,1,1] : [3,4] (Add level 1)
@@ -883,29 +994,6 @@ var FuzzySearch = (function () {
     //  12233333345555677778  // Score of this line [1,3] [4,5] [10,12] [15,17] [20,21]
     //  ii-i-----ii---ii---i  // New increase point
     //  12345678901234567890  // Position
-    //
-    //  Two consecutive increase point without match between them ?
-    //  => Copy from last line.
-    //
-    //  An increase point and a match at the same position ?
-    //  => Copy from last line.
-    //
-    // The pattern that trigger a change from last line is:
-    //  => first match between two increase point <=
-    //
-    // Match at position 4 is dominant, it make the value increase form 2 to 3.
-    // Match at position 6 is recessive, it also make value from 2 to 3 BUT value for the line was already 3.
-    //       All thing considered that match point could have been removed
-    //
-    // When registering a dominant match, we'll either
-    //   - grow an existing block if the math happens right after one
-    //   - start a new block.
-    //
-    // Because match make increase point happens sooner
-    // we also need to remove one increase point from following block.
-    // if the initial length was 1, the length is now 0 and block is skipped
-    // otherwise it is copied to current line.
-    //
 
     FuzzySearch.llcs_large = function (a, b, aMap, prefix) {
 
@@ -1034,680 +1122,67 @@ var FuzzySearch = (function () {
 
     };
 
-    FuzzySearch.prototype.highlight = function (b) {
-        return FuzzySearch.highlight(this.query.normalized, b, this)
-    };
-
-    FuzzySearch.highlight = function (a, b, options) {
-
-        if (options === undefined) options = _defaults;
-        if (!b) return "";
-
-        //var time_start = performance.now();
-
-        var open_string = options.highlight_before;
-        var close_string = options.highlight_after;
-        var opt_score_tok = options.score_per_token;
-
-        var aa = FuzzySearch.normalize(a);
-        var bb = FuzzySearch.normalize(b);
-
-        var a_tokens = aa.split(" ");
-        var b_tokens = bb.split(" ");
-        var disp_tokens = b.split(/\s+/);
-
-        // enforce maximum number of token in a
-        // after max, token are lumped together a big one
-        var nb_max_tokens = options.max_search_tokens;
-        if (a_tokens.length > nb_max_tokens + 1) {
-            var extra = a_tokens.splice(nb_max_tokens).join(" ");
-            a_tokens.push(extra);
-        }
-
-        var strArr = [];
-        var match_list = [];
-        var fused_score, match_score;
-
-        if(opt_score_tok){
-            match_score = FuzzySearch.matchTokens(b_tokens, a_tokens, match_list, options);
-            if (match_score === 0) return b; //shortcut no match
-            //Test "spacebar is broken" no token match
-            fused_score = FuzzySearch.score(aa, bb, options);
-        }
-
-        if (!opt_score_tok || fused_score > match_score) {
-            a_tokens = [aa]; //everything in a single token
-            b_tokens = [bb];
-            disp_tokens = [disp_tokens.join(" ")];
-            match_list = [0];
-        }
-
-        var nbtok = disp_tokens.length, j = -1;
-        while (++j < nbtok) {
-
-            var i = match_list[j];
-
-            if (i === -1) {
-                strArr.push(disp_tokens[j] + " ");
-                continue;
-            }
-
-            var ta = a_tokens[i];
-            var tb = b_tokens[j];
-            var td = disp_tokens[j];
-            var curr = 0;
-
-            var start_positions = [];
-            var end_positions = [];
-            FuzzySearch.align(ta, tb, start_positions, end_positions);
-            var len = start_positions.length;
-
-            var k = -1;
-            while (++k < len) {
-
-                var s = start_positions[k];
-                var e = end_positions[k];
-                if (s > curr) strArr.push(td.substring(curr, s));
-                strArr.push(open_string + td.substring(s, e) + close_string);
-                curr = e;
-
-            }
-
-            strArr.push(td.substring(curr) + " ");
-
-        }
-
-        //var time_end = performance.now();
-        //console.log("Highlight took " + (time_end-time_start) + " milliseconds.");
-
-        return strArr.join('');
-
-    };
-
-
-    //
-    // Smith-Waterman-Gotoh local Alignment
-    //
-    // Smith&Waterman worked the idea of local alignment
-    // While Gotoh 82  worked on affine gap penalty.
-    //
-    // This is the basic algorithm with some optimisation to use less space.
-    // JAligner has been used as a reference implementation to debug.
-    // Some of their implementation detail to save memory has been reused here.
-    //
-    // See pseudo-code on
-    // http://jaligner.sourceforge.net/api/jaligner/SmithWatermanGotoh.html
-    //
-    //
-
-    FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
-
-        if (options === undefined) options = _defaults;
-
-        var wm = 1.0;   // score to making a match
-        var wo = -0.1;  // score to open a gap
-        var we = -0.01; // score to continue an open gap
-
-        var STOP = 0; //Traceback direction constant
-        var UP = 1;
-        var LEFT = 2;
-        var DIAGONAL = 3;
-
-        var msz = options.token_max_length;
-        var m = Math.min(a.length + 1, msz);
-        var n = Math.min(b.length + 1, msz);
-
-        // Comon prefix is part of lcs,
-        // but not necessarily part of best alignment  (it can introduce an extra gap)
-        // however prefix  make sens in an autocomplete scenario and speed things up
-        //
-        var i, j;
-        var k = m < n ? m : n;
-        var prefixlen = 0;
-
-        if (a === b) {
-            //speedup equality
-            prefixlen = m;
-            m = 0;
-        }
-        else if (options.highlight_prefix) {
-            for (i = 0; i < k && (a[i] === b[i]); i++) prefixlen++;
-
-            if (prefixlen) {
-                a = a.substring(prefixlen);
-                b = b.substring(prefixlen);
-
-                m -= prefixlen;
-                n -= prefixlen;
-            }
-        }
-
-        var vmax = 0, imax = 0, jmax = 0;
-
-
-        var traceback = new Array(m * n);
-        var pos = n - 1;
-
-        //m,n = length+1
-        if (m > 1 && n > 1) {
-
-            var vrow = new Array(n), vd, v, align;
-            var gapArow = new Array(n), gapA, gapB = 0;
-
-            for (j = 0; j < n; j++) {
-                gapArow[j] = 0;
-                vrow[j] = 0;
-                traceback[j] = STOP;
-            }
-
-            for (i = 1; i < m; i++) {
-
-                gapB = 0;
-                vd = vrow[0];
-
-                pos++;
-                traceback[pos] = STOP;
-
-                for (j = 1; j < n; j++) {
-
-                    //
-                    // Reference "pseudocode"
-                    // We try to fill that table, but using o(n) instead o(m*n) memory
-                    // If we need traceback we still need o(m*n) but we store a single table instead of 3
-                    //
-                    // F[i][j] = f =  Math.max(F[i - 1][j] + we, V[i - 1][j] + wo );
-                    // E[i][j] = e = Math.max(E[i][j - 1] + we, V[i][j - 1] + wo );
-                    // align = (a[i - 1] === b[j - 1]) ? V[i - 1][j - 1] + wm : -Infinity;
-                    // V[i][j] = v = Math.max(e, f, align, 0);
-                    //
-
-                    // Score the options
-                    gapA = gapArow[j] = Math.max(gapArow[j] + we, vrow[j] + wo); //f
-                    gapB = Math.max(gapB + we, vrow[j - 1] + wo); //e
-                    align = ( a[i - 1] === b[j - 1] ) ? vd + wm : -Infinity;
-                    vd = vrow[j];
-
-                    v = vrow[j] = Math.max(align, gapA, gapB, 0);
-
-                    // Determine the traceback direction
-                    pos++;  //pos = i * n + j;
-                    switch (v) {
-
-                        // what triggered the best score ?
-
-                        case align:
-                            traceback[pos] = DIAGONAL;
-
-                            if (v > vmax) {
-                                vmax = v;
-                                imax = i;
-                                jmax = j;
-                            }
-
-                            break;
-
-                        case gapB:
-                            traceback[pos] = LEFT;
-                            break;
-
-                        case gapA:
-                            traceback[pos] = UP;
-                            break;
-
-                        default:
-                            traceback[pos] = STOP;
-                            break;
-
-                    }
-
-
-                }
-            }
-
-
-        }
-
-        // - - - - - - - - -
-        //     TRACEBACK
-        // - - - - - - - - -
-
-        var bridge = options.highlight_bridge_gap;
-        var last_match = 0;
-
-        if (vmax > 0) {
-
-            // backtrack to aligned sequence
-            // record start and end of substrings
-            // vmax happens at the end of last substring
-
-            i = imax;
-            j = jmax;
-            pos = i * n + j;
-            last_match = jmax;
-            seq_end.push(jmax + prefixlen);
-
-
-            var backtrack = true;
-            while (backtrack) {
-
-                switch (traceback[pos]) {
-
-                    case UP:
-                        i--;
-                        pos -= n;
-                        break;
-
-                    case LEFT:
-                        j--;
-                        pos--;
-                        break;
-
-                    case DIAGONAL:
-
-                        // if we have traversed a gap
-                        // record start/end of sequence
-                        // (unless we want to bridge the gap)
-
-                        if (last_match - j > bridge) {
-                            seq_start.push(last_match + prefixlen);
-                            seq_end.push(j + prefixlen);
-                        }
-
-                        j--;
-                        i--;
-                        last_match = j;
-                        pos -= n + 1;
-                        break;
-
-                    case STOP:
-                    default :
-                        backtrack = false;
-
-                }
-
-            }
-
-            //first matched char
-            seq_start.push(last_match + prefixlen);
-
-        }
-
-
-        if (prefixlen) {
-
-            if (last_match > 0 && last_match <= bridge) {
-
-                //bridge last match to prefix ?
-                seq_start[seq_start.length - 1] = 0
-
-            } else {
-
-                //add prefix to matches
-                seq_start.push(0);
-                seq_end.push(prefixlen);
-
-            }
-
-        }
-
-        //array were build backward, reverse to sort
-        seq_start.reverse();
-        seq_end.reverse();
-
-        return vmax + prefixlen;
-
-
-    };
-
-
-    //
-    // Each query token is matched against a field token
-    // or against nothing (not in field)
-    //
-    // a: [paint] [my] [wall]
-    // b: [wall] [painting]
-    //
-    // match: [1, -1, 0]
-    //
-    // if a[i] match b[j]
-    //      then match[i] = j
-    //
-    // if a[i] match nothing
-    //      then match[i] = -1
-    //
-    // return match score
-    // take vector match by reference to output match detail
-    //
-    // Ideal case:
-    // each token of "a" is matched against it's highest score(a[i],b[j])
-    //
-    // But in case two token have the same best match
-    // We have to check for another pairing, giving highest score
-    // under constraint of 1:1 exclusive match
-    //
-    // To do that we check all possible pairing permutation,
-    // but we restrict ourselves to a set of plausible pairing.
-    //
-    // That is a token a will only consider pairing with a score at least
-    //     thresh_relative_to_best * [highest score]
-    //
-
-
-    FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options) {
-
-        if (options === undefined) options = _defaults;
-
-        var minimum_match = options.minimum_match;
-        var bonus_match_start = options.bonus_match_start;
-        var best_thresh = options.thresh_relative_to_best;
-
-        var i, j, row;
-        var C = [];
-
-        var m = a_tokens.length;
-        var n = b_tokens.length;
-
-        //
-        // to minimise recursion depth, "a" should be smaller than "b"
-        // we can flip the problem if we believe we can save enough
-        // to justify to cost of flipping it back at the end
-        //
-
-        var flip = false;
-        if (m > 1 && n > 1 && m - n > 10) {
-            //switch a, b
-            var tmp = a_tokens;
-            a_tokens = b_tokens;
-            b_tokens = tmp;
-            i = m;
-            m = n;
-            n = i;
-            flip = true;
-        }
-
-
-        var a_maps = _map(a_tokens, FuzzySearch.bitVector);
-        var a_tok, b_tok, a_mp;
-
-        var rowmax = minimum_match, imax = -1, jmax = -1, v;
-        var matchcount = 0;
-        var thresholds = [];
-
-        for (i = 0; i < m; i++) {
-
-            row = [];
-            match[i] = -1;
-            rowmax = minimum_match;
-
-            a_tok = a_tokens[i];
-            if (!a_tok.length) continue;
-
-            a_mp = a_maps[i];
-
-            for (j = 0; j < n; j++) {
-
-                b_tok = b_tokens[j];
-                if (!b_tok.length) continue;
-
-                v = FuzzySearch.score_map(a_tok, b_tok, a_mp, bonus_match_start);
-                row[j] = v;
-
-                if (v > minimum_match) matchcount++;
-
-                if (v > rowmax) {
-                    rowmax = v;
-                    imax = i;
-                    jmax = j;
-                }
-
-            }
-
-            thresholds[i] = rowmax;
-
-            C[i] = row;
-        }
-
-        //Shortcut: no match
-        if (matchcount === 0) return 0;
-
-        //Shortcut: single possible pairing
-        if (matchcount === 1) {
-            match[imax] = jmax;
-            if (flip) FuzzySearch._flipmatch(match, n);
-            return rowmax
-        }
-
-
-        //Only consider matching close enough to best match
-        for (i = 0; i < a_tokens.length; i++) {
-            thresholds[i] = Math.max(best_thresh * thresholds[i], minimum_match);
-        }
-
-
-        var score = FuzzySearch._matchScoreGrid(C, match, thresholds);
-
-        //Flip back the problem if necessary
-        if (flip) FuzzySearch._flipmatch(match, n);
-
-        return score;
-
-    };
-
-    FuzzySearch._matchScoreGrid = function (C, match, thresholds) {
-
-        var ilen = C.length;
-        var i, j;
-
-        //Traverse score grid to find best permutation
-        var scoretree = [];
-        for (i = 0; i < ilen; i++) {
-            scoretree[i] = {};
-        }
-
-        var score = FuzzySearch._buildScoreTree(C, scoretree, 0, 0, thresholds);
-
-        var used = 0, item;
-
-        for (i = 0; i < ilen; i++) {
-
-            item = scoretree[i][used];
-            if (!item) break;
-            j = item[1];
-            match[i] = j;
-            if (j > -1) used |= (1 << j);
-
-        }
-
-
-        return score
-    };
-
-    //
-    // Cache tree:
-    //
-    // Given 5 node: 1,2,3,4,5
-    //
-    //  What is the best match ...
-    //    - knowing that we have passed thru 1->2->3
-    //    - knowing that we have passed thru 2->3->1
-    //    - knowing that we have passed thru 3->1->2
-    //
-    //  All those question have the same answer
-    //  because they are equivalent to match {4,5} againt {4,5}
-    // ( in an alternate pass we can match {1,3} againt {4,5} for example )
-    //
-    // We store match in j in a bit vector of size 32
-    //
-    // In addition of saving computation, the cache_tree data structure is used to
-    // trace back the best permutation !
-    //
-    // In addition of quick testing if an item is already used, used_mask serve
-    // as a key in cache_tree (in addition to level). Ideal key would be a list of available trial
-    // but, used & available are complementary vector (~not operation) so used is a perfeclty valid key too...
-
-    FuzzySearch._buildScoreTree = function (C, cache_tree, used_mask, depth, score_thresholds) {
-
-        var ilen = C.length;
-        var jlen = C[depth].length;
-        if (jlen > 32) jlen = 32;
-
-        var j, score;
-        var include_thresh = score_thresholds[depth];
-        var best_score = 0, best_index = -1;
-        var has_child = (depth < ilen - 1);
-        var child_tree = cache_tree[depth + 1], child_key;
-
-        for (j = 0; j < jlen; j++) {
-
-            var bit = 1 << j;
-
-            //if token previously used, skip
-            if (used_mask & bit) continue;
-
-            //score for this match
-            score = C[depth][j];
-
-            //too small of a match, skip
-            if (score < include_thresh) continue;
-
-            //score for child match
-            //if we already have computed this sub-block get from cache
-            if (has_child) {
-                child_key = used_mask | bit;
-                if (child_key in  child_tree) score += child_tree[child_key][0];
-                else score += FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
-            }
-
-            if (score > best_score) {
-                best_score = score;
-                best_index = j;
-            }
-
-        }
-
-        //try the move of "do not match this token against anything"
-        if (has_child) {
-
-            child_key = used_mask;
-            if (child_key in  child_tree) score = child_tree[child_key][0];
-            else  score = FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
-
-            if (score > best_score) {
-                best_score = score;
-                best_index = -1;
-            }
-
-        }
-
-
-        cache_tree[depth][used_mask] = [best_score, best_index];
-        return best_score;
-
-
-    };
-
-
-    FuzzySearch._flipmatch = function (match, newlen) {
-
-        var i, j;
-        var ref = match.slice();
-        match.length = newlen;
-
-        for (i = 0; i < newlen; i++) {
-            match[i] = -1;
-        }
-
-        for (i = 0; i < ref.length; i++) {
-            j = ref[i];
-            if (j > -1 && j < newlen) match[j] = i;
-        }
-
-    };
-
-
-    //
-    // Identify
-    // Use to compare bloodhound, get unique set etc
-    //
-
-    // 32 bit FNV-1a hash
-    // Ref.: http://isthe.com/chongo/tech/comp/fnv/
-    function fnv32a( str )
-    {
-        var hash = 0x811c9dc5;
-        for ( var i = 0; i < str.length; ++i )
-        {
-            hash ^= str.charCodeAt(i);
-            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-        }
-        return hash >>> 0;
+    // Export to Common JS Loader
+    if (typeof exports === 'object') {
+        // CommonJS-like environments
+        module.exports = FuzzySearch;
+    } else if (typeof define === 'function' && define.amd) {
+        // AMD. Register as an anonymous module.
+        define(function() {
+            return FuzzySearch;
+        });
+    } else {
+        // Browser globals (root is window)
+        global.FuzzySearch = FuzzySearch;
     }
-
-    FuzzySearch.identify = function (item, keys) {
-        var str;
-
-        var type = Object.prototype.toString.call(keys);
-
-        if(!keys || !keys.length)
-            str = JSON.stringify(item);
-        else if(type === '[object String]')
-            str = FuzzySearch.getField(item,keys);
-        else if(type === '[object Array]')
-            str = FuzzySearch.generateFields(item,keys).join('¬');
-        else
-            str = JSON.stringify(item);
-
-        return  fnv32a( str );
-
-    };
-
 
     return FuzzySearch;
 
-})();
+})(this);
 
 //
 // Reference implementation to debug
 // Might need to swap input to match internal of a given algorithm
 //
 
+/*
+ function lcs(a, b) {
 
- function lcs(a,b) {
+ var m = a.length;
+ var n = b.length;
+ var i, j;
 
-     var m = a.length;
-     var n = b.length;
-     var i, j;
+ //init m by n array  with 0
+ var C = [], row = [], lcs = [];
+ for (j = 0; j < n; j++) row[j] = 0;
+ for (i = 0; i < m; i++) C[i] = row.slice();
 
-     //init m by n array  with 0
-     var C = [], row = [], lcs = [];
-     for (j = 0; j < n; j++) row[j] = 0;
-     for (i = 0; i < m; i++) C[i] = row.slice();
+ //fill first row and col
+ C[0][0] = (a[0] === b[0]) ? 1 : 0;
+ for (i = 1; i < m; i++) C[i][0] = (a[i] === b[0] || C[i - 1][0]) ? 1 : 0
+ for (j = 1; j < n; j++) C[0][j] = (a[0] === b[j] || C[0][j - 1]) ? 1 : 0
+ console.log(JSON.stringify(C[0]));
 
-     //fill first row and col
-     C[0][0] = (a[0] === b[0]) ? 1 : 0;
-     for (i = 1; i < m; i++) C[i][0] = (a[i] === b[0] || C[i - 1][0]) ? 1 : 0
-     for (j = 1; j < n; j++) C[0][j] = (a[0] === b[j] || C[0][j - 1]) ? 1 : 0
-     console.log(JSON.stringify(C[0]));
-
-     //bulk
-     for (i = 1; i < m; i++){
-     for (j = 1; j < n; j++) {
-     C[i][j] = (a[i] === b[j]) ? C[i - 1][j - 1] + 1 : Math.max(C[i][j - 1], C[i - 1][j]);
-     }
-     console.log(JSON.stringify(C[i]));
-     }
-
-     //backtrack
-     i--; j--;
-     while (i > -1 && j > -1) {
-     if (i && C[i][j] == C[i - 1][j])  i--;
-     else if (j && C[i][j] == C[i][j - 1]) j--;
-     else {
-     lcs.push(a[i]);
-     j--;
-     i--;
-     }
-     }
-
-     return lcs.reverse().join('');
+ //bulk
+ for (i = 1; i < m; i++) {
+ for (j = 1; j < n; j++) {
+ C[i][j] = (a[i] === b[j]) ? C[i - 1][j - 1] + 1 : Math.max(C[i][j - 1], C[i - 1][j]);
  }
+ console.log(JSON.stringify(C[i]));
+ }
+
+ //backtrack
+ i--;
+ j--;
+ while (i > -1 && j > -1) {
+ if (i && C[i][j] == C[i - 1][j])  i--;
+ else if (j && C[i][j] == C[i][j - 1]) j--;
+ else {
+ lcs.push(a[i]);
+ j--;
+ i--;
+ }
+ }
+
+ return lcs.reverse().join('');
+ }*/
