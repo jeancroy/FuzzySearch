@@ -1,3 +1,14 @@
+/**
+ * @license Highlight.FuzzySearch.js
+ * Highlight plugin for FuzzySearch
+ * https://github.com/jeancroy/FuzzySearch
+ *
+ * Copyright (c) 2015, Jean Christophe Roy
+ * Licensed under The MIT License.
+ * http://opensource.org/licenses/MIT
+ */
+
+
 (function (FuzzySearch) {
 
     /**@const*/
@@ -23,11 +34,22 @@
         }
     }
 
-
-    FuzzySearch.prototype.highlight = function (b) {
-        return FuzzySearch.highlight(this.query.normalized, b, this)
+    /**
+     * Highlight a string using query stored in a FuzzySearch object.
+     * @param {String} str
+     */
+    FuzzySearch.prototype.highlight = function (str) {
+        return FuzzySearch.highlight(this.query.normalized, str, this)
     };
 
+    /**
+     * Highlight string b, from searching a in it.
+     *
+     * @param {String} a - string to search
+     * @param {String} b - string to highlight
+     * @param {FuzzySearch=} options
+     *
+     */
     FuzzySearch.highlight = function (a, b, options) {
 
         if (options === undefined) options = FuzzySearch.defaultOptions;
@@ -117,6 +139,19 @@
     // http://jaligner.sourceforge.net/api/jaligner/SmithWatermanGotoh.html
     //
     //
+
+    /**
+     * Smith-Waterman-Gotoh local Alignment
+     * Build sequences of matches, called send array (seq_start,seq_end) to store them
+     * Return match score
+     *
+     * @param {String} a -  string to search
+     * @param {String} b - string to be searched
+     * @param {Number[]} seq_start - store for match start
+     * @param {Number[]} seq_end - store for match end
+     * @param {FuzzySearch=} options
+     * @returns {number}
+     */
 
     FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 
@@ -369,10 +404,20 @@
     //     thresh_relative_to_best * [highest score]
     //
 
-
+    /**
+     * Match token of A again token of B, under constraint that tokens can be matched at most once.
+     *
+     * @param {String[]} a_tokens
+     * @param {String[]} b_tokens
+     * @param {Number[]} match - array to store results
+     * @param {FuzzySearch=} options
+     * @param {Boolean=} flip - if true score A against B, but return index of B against A.
+     * @returns {Number} Score of the best match combination.
+     */
     FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options, flip) {
 
         if (options === undefined) options = FuzzySearch.defaultOptions;
+        if (flip == undefined) flip = false;
 
         var minimum_match = options.minimum_match;
         var best_thresh = options.thresh_relative_to_best;
@@ -382,25 +427,6 @@
 
         var m = a_tokens.length;
         var n = b_tokens.length;
-
-        //
-        // to minimise recursion depth, "a" should be smaller than "b"
-        // we can flip the problem if we believe we can save enough
-        // to justify to cost of flipping it back at the end
-        //
-
-        if (flip == undefined) flip = false;
-        if (m > 1 && n > 1 && m - n > 10) {
-            //switch a, b
-            var tmp = a_tokens;
-            a_tokens = b_tokens;
-            b_tokens = tmp;
-            i = m;
-            m = n;
-            n = i;
-            flip = !flip;
-        }
-
 
         var a_maps = FuzzySearch.mapAlphabet(a_tokens);
         var a_tok, b_tok, a_mp;
@@ -449,7 +475,7 @@
         //Shortcut: single possible pairing
         if (matchcount === 1) {
             match[imax] = jmax;
-            if (flip) FuzzySearch._flipmatch(match, n);
+            if (flip) _flipmatch(match, n);
             return rowmax
         }
 
@@ -460,16 +486,29 @@
         }
 
 
-        var score = FuzzySearch._matchScoreGrid(C, match, thresholds);
+        var score = _matchScoreGrid(C, match, thresholds);
 
         //Flip back the problem if necessary
-        if (flip) FuzzySearch._flipmatch(match, n);
+        if (flip) _flipmatch(match, n);
 
         return score;
 
     };
 
-    FuzzySearch._matchScoreGrid = function (C, match, thresholds) {
+    /**
+     * Perform the match as FuzzySearch.matchTokens
+     * but token against token score is already computed as C
+     *
+     * This is mostly a preparation phase for _buildScoreTree as well
+     * as a post processing traversal to recover the match.
+     *
+     * @param {Number[][]} C - precomputed score
+     * @param {Number[]} match - store the position of best matches
+     * @param thresholds - Information about the minimum score each token is willing to match
+     * @returns {Number} - best score
+     * @private
+     */
+     function _matchScoreGrid(C, match, thresholds) {
 
         var ilen = C.length;
         var i, j;
@@ -480,7 +519,7 @@
             score_tree[i] = {};
         }
 
-        var score = FuzzySearch._buildScoreTree(C, score_tree, 0, 0, thresholds);
+        var score = _buildScoreTree(C, score_tree, 0, 0, thresholds);
 
         var used = 0, item;
 
@@ -493,9 +532,8 @@
 
         }
 
-
         return score
-    };
+    }
 
     //
     // Cache tree:
@@ -525,7 +563,21 @@
         this.index = index;
     }
 
-    FuzzySearch._buildScoreTree = function (C, cache_tree, used_mask, depth, score_thresholds) {
+    /**
+     * Branch out to try each permutation of items of A against item of B.
+     * - Only try branched not already used.
+     * - Prune branch below token threshold.
+     * - Build a tree to cache sub-problem for which we already have a solution
+     *
+     * @param {Number[][]} C
+     * @param {Object[]} cache_tree
+     * @param {Number} used_mask
+     * @param {Number} depth
+     * @param {Number} score_thresholds
+     * @returns {number} score
+     * @private
+     */
+    function _buildScoreTree (C, cache_tree, used_mask, depth, score_thresholds) {
 
         var ilen = C.length;
         var jlen = C[depth].length;
@@ -555,7 +607,7 @@
             if (has_child) {
                 child_key = used_mask | bit;
                 if (child_key in  child_tree) score += child_tree[child_key].score;
-                else score += FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
+                else score += _buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
             }
 
             if (score > best_score) {
@@ -570,7 +622,7 @@
 
             child_key = used_mask;
             if (child_key in  child_tree) score = child_tree[child_key].score;
-            else  score = FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
+            else  score = _buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
 
             if (score > best_score) {
                 best_score = score;
@@ -579,15 +631,24 @@
 
         }
 
-
         cache_tree[depth][used_mask] = new MatchTryout(best_score, best_index);
         return best_score;
 
+    }
 
-    };
+    /**
+     * Let A,B be two array
+     * Input is an array that map "index of A"->"index of B"
+     * Output is the reverse "index of B"->"index of A"
+     *
+     * Array is modified in place
+     *
+     * @param {Number[]} match - array to remap
+     * @param {Number} newlen - length of B
+     * @private
+     */
 
-
-    FuzzySearch._flipmatch = function (match, newlen) {
+     function _flipmatch (match, newlen) {
 
         var i, j;
         var ref = match.slice();
@@ -602,6 +663,6 @@
             if (j > -1 && j < newlen) match[j] = i;
         }
 
-    };
+    }
 
 })(FuzzySearch);
