@@ -17,7 +17,7 @@
     //
     var defaults = FuzzySearch.defaultOptions;
 
-    for (key in highlightOptions) {
+    for (var key in highlightOptions) {
         if (highlightOptions.hasOwnProperty(key)) {
             defaults[key] = highlightOptions[key];
         }
@@ -44,14 +44,6 @@
         var a_tokens = aa.split(" ");
         var b_tokens = bb.split(" ");
         var disp_tokens = b.split(/\s+/);
-
-        // enforce maximum number of token in a
-        // after max, token are lumped together a big one
-        var nb_max_tokens = options.max_search_tokens;
-        if (a_tokens.length > nb_max_tokens + 1) {
-            var extra = a_tokens.splice(nb_max_tokens).join(" ");
-            a_tokens.push(extra);
-        }
 
         var strArr = [];
         var match_list = [];
@@ -483,21 +475,20 @@
         var i, j;
 
         //Traverse score grid to find best permutation
-        var scoretree = [];
+        var score_tree = [];
         for (i = 0; i < ilen; i++) {
-            scoretree[i] = {};
+            score_tree[i] = {};
         }
 
-        var score = FuzzySearch._buildScoreTree(C, scoretree, 0, 0, thresholds);
+        var score = FuzzySearch._buildScoreTree(C, score_tree, 0, 0, thresholds);
 
         var used = 0, item;
 
         for (i = 0; i < ilen; i++) {
 
-            item = scoretree[i][used];
+            item = score_tree[i][used];
             if (!item) break;
-            j = item[1];
-            match[i] = j;
+            match[i] = j = item.index;
             if (j > -1) used |= (1 << j);
 
         }
@@ -529,6 +520,11 @@
     // as a key in cache_tree (in addition to level). Ideal key would be a list of available trial
     // but, used & available are complementary vector (~not operation) so used is a perfeclty valid key too...
 
+    function MatchTryout(score,index){
+        this.score = score;
+        this.index = index;
+    }
+
     FuzzySearch._buildScoreTree = function (C, cache_tree, used_mask, depth, score_thresholds) {
 
         var ilen = C.length;
@@ -558,7 +554,7 @@
             //if we already have computed this sub-block get from cache
             if (has_child) {
                 child_key = used_mask | bit;
-                if (child_key in  child_tree) score += child_tree[child_key][0];
+                if (child_key in  child_tree) score += child_tree[child_key].score;
                 else score += FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
             }
 
@@ -573,7 +569,7 @@
         if (has_child) {
 
             child_key = used_mask;
-            if (child_key in  child_tree) score = child_tree[child_key][0];
+            if (child_key in  child_tree) score = child_tree[child_key].score;
             else  score = FuzzySearch._buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
 
             if (score > best_score) {
@@ -584,7 +580,7 @@
         }
 
 
-        cache_tree[depth][used_mask] = [best_score, best_index];
+        cache_tree[depth][used_mask] = new MatchTryout(best_score, best_index);
         return best_score;
 
 

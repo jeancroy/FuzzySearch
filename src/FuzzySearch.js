@@ -61,7 +61,7 @@
         token_field_min_length: 3,       // include greater or equal, in item field
         token_query_max_length: 64,      // Shorten large token to give more even performance.
         token_field_max_length: 64,      // Shorten large token to give more even performance.
-        token_fused_max_length: 32,      // Shorten large token to give more even performance.
+        token_fused_max_length: 64,      // Shorten large token to give more even performance.
 
         //Do not attempt to match token too different in size: n/m = len(field_tok)/len(query_tok)
         token_min_rel_size: 0.6,         // Field token should contain query token. Reject field token that are too small.
@@ -97,6 +97,7 @@
 
     /**
      * Number of bit in a int.
+     * DEBUG-tip: setting this to zero will force "long string" algorithm for everything!
      * @const
      */
     var INT_SIZE = 32;
@@ -191,12 +192,6 @@
         this.item = original;
         this.fields = fields;
     }
-
-    function Block(start, end) {
-        this.start = start;
-        this.end = end;
-    }
-
 
     FuzzySearch.prototype = {
 
@@ -650,9 +645,10 @@
             //general case
             var parts = path.split(".");
             var nb_level = parts.length;
-            obj = source[i];
 
             for (i=-1;++i < n;) {
+                obj = source[i];
+
                 for ( var level = -1;++level < nb_level;) {
                     var key = parts[level];
                     if (!(key in obj)) break;
@@ -995,6 +991,11 @@
     //  ii-i-----ii---ii---i  // New increase point
     //  12345678901234567890  // Position
 
+    function Block(start, end) {
+        this.start = start;
+        this.end = end;
+    }
+
     FuzzySearch.llcs_large = function (a, b, aMap, prefix) {
 
         //var aMap = FuzzySearch.posVector(a);
@@ -1013,9 +1014,9 @@
         if (prefix === undefined) prefix = 0;
 
         if (prefix)
-            last_line = [[0, prefix], [Infinity, Infinity]];
+            last_line = [new Block(0, prefix), new Block(Infinity, Infinity)];
         else
-            last_line = [[Infinity, Infinity]];
+            last_line = [new Block(Infinity, Infinity)];
 
         var lcs_len = prefix;
 
@@ -1050,8 +1051,8 @@
 
                 //Read end block
                 block = last_line[block_index];
-                block_start = block[0]; //Encode block as [s,e[
-                block_end = block[1]; //End is position of char that follow last.
+                block_start = block.start; //Encode block as [s,e[
+                block_end = block.end; //End is position of char that follow last.
                 block_size = block_end - block_start;
 
                 //get next match from list of matches
@@ -1075,7 +1076,7 @@
 
                 if (match_pos === last_end) {
                     //End of last block ? (step a.ii)
-                    current_line[line_index][1]++;
+                    current_line[line_index].end++;
                 }
                 else {
 
@@ -1083,12 +1084,12 @@
                     //try to reuse block that will get deleted.
                     if (block_size === 1) {
                         //Can we reuse next block ?
-                        block[0] = match_pos;
-                        block[1] = match_pos + 1;
+                        block.start = match_pos;
+                        block.end = match_pos + 1;
                         current_line[++line_index] = block;
                     } else {
                         //start a new block
-                        current_line[++line_index] = [match_pos, match_pos + 1];
+                        current_line[++line_index] = new Block(match_pos, match_pos + 1);
                     }
 
                 }
@@ -1096,7 +1097,7 @@
                 // if not empty, append next block to current line (step a.iii)
                 // (this condition reject "sentinel", it'll get added just after the for loop)
                 if (block_size > 1) {
-                    block[0]++; // Move start by one
+                    block.start++; // Move start by one
                     current_line[++line_index] = block;
                 }
 
