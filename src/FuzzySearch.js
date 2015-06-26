@@ -20,7 +20,7 @@
 
         if (options === undefined) options = {};
         if (!(this instanceof FuzzySearch)) return new FuzzySearch(options);
-        FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, null)
+        FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, true)
 
     }
 
@@ -94,10 +94,15 @@
 
         source: [],
         keys: [""],
-        sorter: null,
+        sorter: null, // default to FuzzySearch.compareResults
+        dirty: false, // set to true to request a new lazy index pass. (index recomputed only on next search)
+        index: [],    // source is processed using keys, then stored here
 
-        //Privates
-        index: [],
+        //
+        // Last search
+        //
+
+        query:null,
         results: [],
         start_time: 0,
         search_time: 0
@@ -114,43 +119,40 @@
     /**
      * Set property of object,
      * Restrict properties that can be set from a list of available defaults.
-     * If options do not contain key, we try to get value from previous, failing that, we get value from default.
-     * Previous can be set to null, in which case we fallback directly to default.
-     *
-     * In this library a new object is created with previous=null,
-     * and existing objects are modified with previous=this.
      *
      * @param {FuzzySearch} self
      * @param {Object} options
      * @param {Object} defaults
-     * @param {FuzzySearch|null} previous
+     * @param {boolean} reset
      *
      */
-    FuzzySearch.setOptions = function (self, options, defaults, previous) {
+    FuzzySearch.setOptions = function (self, options, defaults, reset) {
 
-        var oSource = self.source;
+        //Record original data, if changed rebuild cache.
+        var oSource = self.source, oKeys = self.keys;
         var key;
 
-        if (!previous) {
+        if (reset) {
 
             for (key in defaults) {
                 if (defaults.hasOwnProperty(key)) {
-                    self[key] = (key in options) ? options[key] : defaults[key];
+                    self[key] = (options.hasOwnProperty(key)) ? options[key] : defaults[key];
                 }
             }
 
         } else {
 
-            for (key in defaults) {
-                if (defaults.hasOwnProperty(key)) {
-                    self[key] = (key in options) ? options[key] : (key in previous) ? previous[key] : defaults[key];
+            for (key in options) {
+                if (options.hasOwnProperty(key) && defaults.hasOwnProperty(key)) {
+                    self[key] = options[key];
                 }
             }
 
         }
 
-        if (self.source !== oSource) {
-            FuzzySearch.addSource(self, self.source, true);
+        if (self.source !== oSource || self.keys !== oKeys) {
+            FuzzySearch.addSource(self, self.source, self.keys, true);
+            self.dirty = false;
         }
 
     };
@@ -164,11 +166,13 @@
      *
      * @param {FuzzySearch} self
      * @param {Array.<Object>} source
+     * @param {Array.<string>} keys
      * @param {boolean} overwrite
+     * @return {FuzzySearch} self
      *
      */
 
-    FuzzySearch.addSource = function (self, source, overwrite) {
+    FuzzySearch.addSource = function (self, source, keys, overwrite) {
 
         var nb_items = source.length, out_index;
 
@@ -185,7 +189,7 @@
         for (var item_index = -1; ++item_index < nb_items;) {
 
             var item = source[item_index];
-            var item_fields = FuzzySearch.generateFields(item, self.keys);
+            var item_fields = FuzzySearch.generateFields(item, keys);
 
             var nb_fields = item_fields.length;
             var fields = new Array(nb_fields);
@@ -284,11 +288,16 @@
          * Allow to change options after the object has been created.
          * If source is changed, new source is indexed.
          *
-         * @param {Object} options
+         * Optional reset allow to change any setting not in options to defaults.
+         * This is similar to creating new object, but using same pointer.
+         *
+         * @param {Object=} options
+         * @param {boolean=false} reset
          */
-        setOptions: function (options) {
+        setOptions: function (options, reset) {
             if (options === undefined) options = {};
-            FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, this);
+            if (reset === undefined) reset = false;
+            FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, reset);
         },
 
         /**
@@ -300,9 +309,13 @@
         search: function (querystring) {
 
             var clock = (window.performance && window.performance.now) ? window.performance : Date;
-
             var time_start = clock.now();
             this.start_time = time_start;
+
+            if(this.dirty){
+                FuzzySearch.addSource(this, this.source, this.keys, true);
+                this.dirty = false;
+            }
 
             var query = this.query = this._prepQuery(querystring);
             var source = this.index;
