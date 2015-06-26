@@ -22,6 +22,7 @@
     /**@const*/
     var INT_SIZE = 32;
 
+    /** @lends {FuzzySearch.prototype} */
     var highlightOptions = {
 
         highlight_prefix: false,         // true: force prefix as part of highlight, (false: minimum gap, slower)
