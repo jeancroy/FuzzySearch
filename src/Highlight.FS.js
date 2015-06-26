@@ -82,10 +82,13 @@
 
         if (opt_score_tok) {
             match_score = FuzzySearch.matchTokens(a_tokens, b_tokens, match_list, options, true);
-            if (match_score === 0) return b; //shortcut no match
-            //Test "spacebar is broken" no token match
-            if (opt_fuse) fused_score = FuzzySearch.score(aa, bb, options);
         }
+
+        //Test "spacebar is broken" no token match
+        if (opt_fuse || !opt_score_tok) fused_score = FuzzySearch.score_map(aa, bb, FuzzySearch.alphabet(aa), options);
+
+        if (match_score === 0 && fused_score===0) return b; //shortcut no match
+
 
         if (!opt_score_tok || fused_score > match_score) {
             a_tokens = [aa]; //everything in a single token

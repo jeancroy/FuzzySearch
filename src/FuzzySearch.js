@@ -255,18 +255,19 @@
     /**
      * Output of search when output_map=""
      *
-     * @param {number} item_score
      * @param {*} item
+     * @param {Array} fields
+     * @param {number} item_score
      * @param {number} matched_field_index
-     * @param {string} matched_field_value
      * @param {string|number} sortkey
      * @constructor
+     * @extends Indexed
      */
-    function SearchResult(item_score, item, matched_field_index, matched_field_value, sortkey) {
-        this.score = item_score;
+    function SearchResult(item, fields, item_score, matched_field_index, sortkey) {
         this.item = item;
+        this.fields = fields;
+        this.score = item_score;
         this.matchIndex = matched_field_index;
-        this.match = matched_field_value;
         this.sortKey = sortkey;
     }
 
@@ -461,10 +462,10 @@
                     item_score = Math.round(item_score / this.score_round) * this.score_round;
 
                     results.push(new SearchResult(
-                        item_score,
                         item.item,
+                        item_fields,
+                        item_score,
                         matched_field_index,
-                        item_fields[matched_field_index].join(" "),
                         item_fields[0].join(" ")
                     ));
 
@@ -476,7 +477,7 @@
         },
 
         /**
-         * Internal loop that is run for each field in a item
+         * Internal loop that is run for each field in an item
          *
          * @param {Array} field_tokens - see FuzzySearch.getFields, FuzzySearch.addSource
          * @param {Query} query
@@ -578,7 +579,7 @@
         },
 
         /**
-         * Fast pass for a single item
+         * Fast pass for a single token query
          *
          * - Tokens is the same as fused, bypass packinfo
          * - No ordering bonus, nothing to order
@@ -594,11 +595,13 @@
 
             var nb_tokens = field_tokens.length;
             var field_score = 0, sc;
+            var query_str = query.fused_str;
+            var query_map =  query.fused_map;
 
             for (var field_tk_index = -1; ++field_tk_index < nb_tokens;) {
 
                 var token = field_tokens[field_tk_index];
-                sc = FuzzySearch.score_map(query.fused_str, token, query.fused_map, this);
+                sc = FuzzySearch.score_map(query_str, token,query_map, this);
 
                 if (sc > field_score) {
                     field_score = sc;
@@ -609,7 +612,7 @@
             if (this.score_test_fused) {
 
                 // test "space bar is broken" no token match
-                var fused_score = FuzzySearch.score_map(query.fused_str, field_tokens.join(" "), query.fused_map, this);
+                var fused_score = FuzzySearch.score_map(query_str, field_tokens.join(" "), query_map, this);
                 field_score = fused_score > field_score ? fused_score : field_score;
 
                 if (fused_score > query.fused_score) {
@@ -736,8 +739,20 @@
                 debounced(query, sync, noop, async);
             }
 
-        }
+        },
 
+        /**
+         * Given a SearchResult object, recover the value of the best matching field.
+         * This is done on demand for display.
+         *
+         * @param {SearchResult} result
+         * @return {string} original field
+         */
+
+        getMatchingField : function(result){
+            var f = FuzzySearch.generateFields(result.item, this.keys);
+            return f[result.matchIndex]
+        }
 
     };
 
@@ -803,6 +818,8 @@
         return indexed_fields;
 
     };
+
+
 
     /**
      * Traverse an object structure to collect item specified by parts.
@@ -995,22 +1012,8 @@
      * @param {string} b
      */
     FuzzySearch.prototype.score = function (a, b) {
-        return FuzzySearch.score(a, b, this)
-    };
-
-    /**
-     * Score of "search a in b"
-     * @param  {string} a
-     * @param {string} b
-     * @param {FuzzySearch=} options
-     */
-    FuzzySearch.score = function (a, b, options) {
-
-        if (options === undefined) options = FuzzySearch.defaultOptions;
         var aMap = FuzzySearch.alphabet(a);
-
-        return FuzzySearch.score_map(a, b, aMap, options);
-
+        return FuzzySearch.score_map(a, b, aMap, this);
     };
 
     /**
@@ -1093,7 +1096,7 @@
      *
      * @param {PackInfo} packinfo
      * @param {string} field_token
-     * @param {FuzzySearch=} options
+     * @param {FuzzySearch} options
      * @returns {Array.<number>} scores
      */
     FuzzySearch.score_pack = function (packinfo, field_token, options) {
