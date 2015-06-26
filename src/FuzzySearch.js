@@ -248,7 +248,8 @@
         while (++i < t) scores[i] = 0;
 
         this.score_item = scores.slice();
-        this.reset = scores;
+        this.score_field = scores.slice();
+        this.field_pos = scores;
     }
 
     /**
@@ -380,8 +381,10 @@
                 var groups = query.tokens_groups;
 
                 for (var group_index = -1, nb_groups = groups.length; ++group_index < nb_groups;) {
-                    var grp = groups[group_index];
-                    grp.score_item = grp.reset.slice();
+
+                    var scitm = groups[group_index].score_item;
+                    for(var i=-1, l = scitm.length;++i<l;) scitm[i]=0
+
                 }
 
                 query.fused_score = 0;
@@ -492,40 +495,44 @@
             var bonus_order = this.bonus_token_order;
             var minimum_match = this.minimum_match;
 
-
-            var token, scores;
+            var token, scores, i;
             for (var group_index = -1; ++group_index < nb_groups;) {
 
                 var group_info = groups[group_index];
-
-                var best_match_this_field = group_info.reset.slice();
-                var best_match_index = group_info.reset.slice();
-
                 var group_tokens = group_info.tokens;
                 var nb_scores = group_tokens.length;
                 var single = (nb_scores == 1);
 
-                var score_index;
+                //var best_match_this_field = group_info.reset.slice();
+                //var best_match_index = group_info.reset.slice();
+
+                var best_of_field = group_info.score_field;
+                for(i=-1;++i<nb_scores;) best_of_field[i]=0
+
+                var best_index = group_info.field_pos;
+                for(i=-1;++i<nb_scores;) best_index[i]=0
+
                 for (var field_tk_index = -1; ++field_tk_index < nb_tokens;) {
 
                     token = field_tokens[field_tk_index];
 
                     if (single) {
+
                         sc = FuzzySearch.score_map(group_tokens[0], token, group_info.map, this);
-                        if (sc > best_match_this_field[0]) {
-                            best_match_this_field[0] = sc;
-                            best_match_index[0] = field_tk_index;
+                        if (sc > best_of_field[0]) {
+                            best_of_field[0] = sc;
+                            best_index[0] = field_tk_index;
                         }
 
                     }
                     else {
 
                         scores = FuzzySearch.score_pack(group_info, token, this);
-                        for (score_index = -1; ++score_index < nb_scores;) {
-                            sc = scores[score_index];
-                            if (sc > best_match_this_field[score_index]) {
-                                best_match_this_field[score_index] = sc;
-                                best_match_index[score_index] = field_tk_index;
+                        for (i = -1; ++i < nb_scores;) {
+                            sc = scores[i];
+                            if (sc > best_of_field[i]) {
+                                best_of_field[i] = sc;
+                                best_index[i] = field_tk_index;
                             }
                         }
 
@@ -534,18 +541,18 @@
                 }
 
                 var best_match_this_item = group_info.score_item;
-                for (score_index = -1; ++score_index < nb_scores;) {
+                for (i = -1; ++i < nb_scores;) {
 
-                    sc = best_match_this_field[score_index];
+                    sc = best_of_field[i];
                     field_score += sc;
 
-                    if (sc > best_match_this_item[score_index])
-                        best_match_this_item[score_index] = sc;
+                    if (sc > best_match_this_item[i])
+                        best_match_this_item[i] = sc;
 
                     // if search token are ordered inside subject give a bonus
                     // only consider non empty match for bonus
                     if (sc > minimum_match) {
-                        var tmp = best_match_index[score_index];
+                        var tmp = best_index[i];
                         if (tmp > last_index) field_score += bonus_order;
                         last_index = tmp;
                     }
