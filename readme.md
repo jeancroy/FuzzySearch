@@ -28,7 +28,7 @@ It perform three kind of operation:
 Can I see a demo ?
 ------------------
 
- [You can view the demo page here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)
+ You can view the demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html) If you are juste getting started, you can see a minimal setup [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html) 
 
 Is this based on edit distance ?
 --------------------------------

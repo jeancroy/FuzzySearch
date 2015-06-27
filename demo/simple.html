@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+
+    <meta charset="UTF-8">
+    <title></title>
+
+    <link href="demo.css" rel="stylesheet" type="text/css" />
+
+    <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
+
+    <script src="../src/FuzzySearch.js"></script>
+    <script src="../src/Highlight.FS.js"></script>
+
+
+</head>
+<body>
+
+
+<h1>FuzzySearch Demo</h1>
+
+<p>Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. </p>
+<p>This demo is for a minimal setup with a list of string source</p>
+<p>List is from the <a href="http://www.nytimes.com/ref/movies/1000best.html">New York Times top 1000 movie list</a>. </p>
+
+
+<h2>Using Twitter Typeahead</h2>
+
+<div class="typeahead">
+    <input id="demo-query" class="twitter-typeahead" name="demo-query" autocomplete="off" type="text">
+</div>
+
+
+<!-- allow to scroll so autocomplete is at top of page -->
+<div style="height: 500px;"></div>
+
+<script>
+
+    //
+    // Create main object
+    // We will fill the data once we have the JSON loaded
+    //
+
+    var fuzzyhound = new FuzzySearch();
+
+    //- - - - - - - - - - -
+    //   Typeahead Setup
+    // - - - - - - - - - - -
+
+        $('#demo-query').typeahead({
+            minLength: 2,
+            highlight: false //let FuzzySearch handle highlight
+        },
+        {
+            name: 'movies',
+            source: fuzzyhound,
+            templates: {
+                suggestion: function(result){return "<div>"+fuzzyhound.highlight(result)+"</div>"}
+            }
+        });
+
+
+    // - - - - - - - - - - - -
+    //   Setup dataset
+    //- - - - - - - - - - - - -
+
+    $.ajaxSetup({cache: true});
+
+    function setsource(url, keys) {
+        $.getJSON(url).then(function (response) {
+            fuzzyhound.setOptions({
+                source: response,
+                keys: keys
+            })
+        });
+    }
+
+    // Load movie dataset
+    // When source is a list of string, we do not have keys to index (each item is the indexed field)
+    setsource("movies.json", []);
+
+
+</script>
+
+
+</body>
+</html>
