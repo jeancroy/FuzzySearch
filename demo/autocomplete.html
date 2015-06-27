@@ -5,124 +5,13 @@
     <meta charset="UTF-8">
     <title></title>
 
+    <link href="demo.css" rel="stylesheet" type="text/css" />
+
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
     <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
     <script src="../dist/FuzzySearch.min.js"></script>
     <script src="../dist/Highlight.FS.min.js"></script>
-
-    <style>
-
-        * {
-            box-sizing: border-box;
-        }
-
-        h1, h2, p, form, label {
-            text-align: center;
-        }
-
-        h1, h2 {
-            margin-top:1.5em;
-            margin-bottom:0.5em;
-        }
-
-
-        .typeahead {
-            width: 90%;
-            max-width: 700px;
-            margin: auto;
-            display: block;
-            padding-bottom: 30px;
-            position: relative;
-        }
-
-        .typeahead input {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            max-width: 700px;
-            padding: 10px;
-            opacity: 1;
-            background: none 0% 0% / auto repeat scroll padding-box border-box rgb(255, 255, 255);
-        }
-
-        .twitter-typeahead {
-            width: 100%;
-        }
-
-        .twitter-typeahead .tt-query,
-        .twitter-typeahead .tt-hint {
-            margin-bottom: 0;
-        }
-
-        .typeahead ul, .typeahead li {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-            border: 0;
-            font: inherit;
-            font-size: 100%;
-            vertical-align: baseline;
-        }
-
-
-        .tt-menu, .ui-menu {
-            width: 100%;
-            max-width: 700px;
-            margin-top: 2px;
-            padding: 5px 0;
-            background-color: #ffffff;
-            border: 1px solid rgba(0, 0, 0, 0.15);
-            border-radius: 4px;
-            -webkit-box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
-            background-clip: padding-box;
-
-        }
-
-        .tt-suggestion, .ui-menu-item {
-            display: block;
-            padding: 6px 20px;
-        }
-
-
-        .ui-helper-hidden-accessible {
-            display: none;
-        }
-
-        .typeahead-footer{
-            border-top:1px solid #eee;
-            margin-top:10px;
-            padding: 20px;
-        }
-
-        .title {
-            color: #222;
-        }
-
-        .title strong {
-            color: #000;
-        }
-
-        .author {
-            color: #666
-        }
-
-        .author strong {
-            color: #444
-        }
-
-        .score {
-            color: #888;
-        }
-
-        td{
-            vertical-align: top;
-            text-align: left;
-        }
-
-    </style>
 
 
 </head>
@@ -150,7 +39,7 @@
         </table>
 
         <br><br>
-        <label> <input type="checkbox" name="fused" id="fused" checked /> Enable fused score </label><br>
+        <label> <input type="checkbox" name="fused" id="fused" /> Enable fused score </label><br>
         (Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war")
 
     </form>
@@ -179,7 +68,7 @@
     // We will fill the data once we have the JSON loaded
     //
 
-    var fuzzyhound = new FuzzySearch({output_limit: 6});
+    var fuzzyhound = new FuzzySearch({output_limit: 6, output_map:"root"});
 
 
     // - - - - - - - - - - - - - - - - - - - - - - -
@@ -229,7 +118,7 @@
                 highlight: false //we'll use FuzzySearch highlight instead
             },
             {
-                name: 'task',
+                name: 'books',
                 limit: 100, // let fuzzyhound apply limit
                 source: fuzzyhound,
                 display: "item.title",
@@ -244,35 +133,41 @@
             });
 
 
-    //- - - - - - - - - - -
-    //    Jquery UI Setup
+    //- - - - - - - - - - --
+    //    Jquery UI Auto complete Setup
     // - - - - - - - - - - -
 
-    var jq_auto =
-            $("#demo-query-ui-auto").autocomplete({
-                minLength: 2,
-                delay: 150,
-                source: function (request, response) {
-                    response(fuzzyhound.search(request.term));
-                },
-                messages: {
-                    noResults: '',
-                    results: function () {
-                    }
+    var $el = $("#demo-query-ui-auto");
+
+        $el.autocomplete({
+            minLength: 2,
+            delay: 0,
+            source: fuzzyhound.$uiSource(),
+            messages: {
+                noResults: '',
+                results: function () {
                 }
+            }
 
-            });
+        });
 
-    //Get instance to extend
-    var jq_instance = jq_auto.autocomplete("instance");
+    //
+    // $ui autocomplete do not support template.
+    // Instead we have "extension point" which are internal rendering function we can rewrite to achieve the result we want.
+    // The plus side is that it give complete control, the bad side is that it get extremely ugly because we mix
+    // inner working with our template definition.
+    //
+
+    //Get instance of autocomplete widget
+    var $instance = $el.autocomplete("instance");
 
     //Custom item
-    jq_instance._renderItem = function (ul, item) {
+    $instance._renderItem = function (ul, item) {
         return $("<li>").append(itemTemplate(item)).appendTo(ul);
     };
 
-    //Custom footer
-    jq_instance._renderMenu = function (ul, items) {
+    //Custom menu, to insert footer
+    $instance._renderMenu = function (ul, items) {
         var nbitems = items.length, i = -1;
         while (++i < nbitems) {
             var display = items[i].item.title;
@@ -301,10 +196,6 @@
     //Load small dataset by default
     setsource("books.json", ["title", "author"]);
 
-    //fuzzyhound.set({
-    //    source: [{"title": "Old Man's War", "author": "John Scalzi"}],
-    //    keys: ["title", "author"]
-    //});
 
     // - - - - - - - - - - - -
     //   Dataset switch UI
@@ -324,11 +215,12 @@
                 break;
         }
 
-        //
-        //el = $('#demo-query');
-        //el.typeahead('val', el.typeahead('val') );
-
     });
+
+    // - - - - - - - - - - - -
+    //   Option UI
+    //- - - - - - - - - - - - -
+
 
     $('#free').change(function () {
         fuzzyhound.setOptions({
