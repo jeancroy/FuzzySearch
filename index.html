@@ -65,7 +65,7 @@ This would not be the case in a spellchecker setup for example.</p>
 <h2>
 <a id="can-i-see-a-demo-" class="anchor" href="#can-i-see-a-demo-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Can I see a demo ?</h2>
 
-<p><a href="https://cdn.rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html">You can view the demo page here</a></p>
+<p>You can view the demo page <a href="https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html">here</a> If you are juste getting started, you can see a minimal setup <a href="https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html">here</a> </p>
 
 <h2>
 <a id="is-this-based-on-edit-distance-" class="anchor" href="#is-this-based-on-edit-distance-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Is this based on edit distance ?</h2>
@@ -82,6 +82,65 @@ This would not be the case in a spellchecker setup for example.</p>
 <p>Computer science often think similarity between two string in term of error (distance). And computational biology in term of matches. (We can view matching in Proteins, DNA, etc as a string problem).</p>
 
 <p>They are related but different problem and the bet of this project is that LCS could be useful for auto-complete scenario (with some help). As a bonus it's often faster to compute.</p>
+
+<h1>
+<a id="algorythm" class="anchor" href="#algorythm" aria-hidden="true"><span class="octicon octicon-link"></span></a>Algorythm</h1>
+
+<p>The whole library is a very elaborate suport arround the following snippet.
+Let <code>strA</code> be the query, position of each character is recorded for fast search later. Let <code>strB</code> be the entry in the database we are trying to score. Second loop is the important part. One lookup and 4 bit operation per character of <code>strB</code>. That's where speed is.</p>
+
+<div class="highlight highlight-javascript"><pre><span class="pl-k">var</span> m <span class="pl-k">=</span> strA.<span class="pl-c1">length</span>;
+<span class="pl-k">var</span> n <span class="pl-k">=</span> strB.<span class="pl-c1">length</span>;
+<span class="pl-k">var</span> aMap <span class="pl-k">=</span> {};
+
+<span class="pl-c">// - - - - - - - -</span>
+<span class="pl-c">// PRECOMPUTE:</span>
+<span class="pl-c">// - - - - - - - -</span>
+
+<span class="pl-c">//Map position of each character of a (first char is lsb, so rigth to left)</span>
+<span class="pl-c">// --------------"retcarahc"</span>
+<span class="pl-c">// aMap["a"] =  0b000010100</span>
+
+<span class="pl-k">for</span> (i <span class="pl-k">=</span> <span class="pl-c1">0</span>; i <span class="pl-k">&lt;</span> m; i<span class="pl-k">++</span>) {
+    aMap[strA[i]] |<span class="pl-k">=</span> (<span class="pl-c1">1</span> <span class="pl-k">&lt;&lt;</span> i)
+}
+
+<span class="pl-k">var</span> mask <span class="pl-k">=</span> ( <span class="pl-c1">1</span> <span class="pl-k">&lt;&lt;</span> m ) <span class="pl-k">-</span> <span class="pl-c1">1</span>;
+<span class="pl-k">var</span> S <span class="pl-k">=</span> mask, U;
+
+<span class="pl-c">// - - - - - - - -</span>
+<span class="pl-c">// For each item</span>
+<span class="pl-c">// - - - - - - - -</span>
+
+<span class="pl-c">// Fill LCS dynamic programing table</span>
+<span class="pl-c">// bitvetor S record position of increase.</span>
+<span class="pl-c">// Whole line computed in parralel !</span>
+<span class="pl-c">// (Same cost to update 1 bit or 32)</span>
+<span class="pl-c">// See Hyyrö, 2004 with S representing V'</span>
+
+<span class="pl-k">for</span> (j <span class="pl-k">=</span> <span class="pl-c1">0</span>; j <span class="pl-k">&lt;</span> n; j<span class="pl-k">++</span>) {
+    U <span class="pl-k">=</span> S <span class="pl-k">&amp;</span> aMap[strB[j]];
+    S <span class="pl-k">=</span> (S <span class="pl-k">+</span> U) | (S <span class="pl-k">-</span> U);
+}
+
+S <span class="pl-k">=</span> <span class="pl-k">~</span>S <span class="pl-k">&amp;</span> mask;
+<span class="pl-c">//Count the numer of bit set (1) in S.</span>
+<span class="pl-c">//this give you number of matching character (llcs) in strA, strB.</span>
+<span class="pl-c">//We'll see below there's still improvement that can be made to this score.</span></pre></div>
+
+<p>This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
+Plus no elaborate data structure so constant should be low. Count dictionary as elaborate ? Maybe, but whole javascript is built around dictionary, even plain array.</p>
+
+<h2>
+<a id="v2" class="anchor" href="#v2" aria-hidden="true"><span class="octicon octicon-link"></span></a>V2</h2>
+
+<p>Just after we tell you how bit parralelism allow to process a 30 char search at the same cost of a single char,
+we go on and apply the algorithm on english word using of about 5 char, and we use 5 out of 30 available bits.
+V2 use a mofified algorithm that allow to pack multiple words in a single 32bit numbers and keep independent score for each word.
+(For example we can use a single pass to process 6 words of 5 char) instead of 6 different pass. </p>
+
+<p>Theoretical speedup is important.  However it make scoring more complex, so in the above case we have a speedup of about 2x instead of 6x or so.
+There's probably room to improve the code.</p>
 
 <h1>
 <a id="basic-usage" class="anchor" href="#basic-usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic usage</h1>
@@ -110,7 +169,7 @@ $(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="p
     source<span class="pl-k">:</span> fuzzyhound,
     display<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>item.title<span class="pl-pds">"</span></span>,
     templates<span class="pl-k">:</span> {
-        <span class="pl-en">suggestion</span>: <span class="pl-k">function</span> (<span class="pl-smi">suggestion</span>) {
+        <span class="pl-en">suggestion</span><span class="pl-k">:</span> <span class="pl-k">function</span> (<span class="pl-smi">suggestion</span>) {
             <span class="pl-k">var</span> item <span class="pl-k">=</span> suggestion.item;
             <span class="pl-k">var</span> query <span class="pl-k">=</span> suggestion._query;
             <span class="pl-k">return</span> [
@@ -122,7 +181,7 @@ $(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="p
 
             ].<span class="pl-c1">join</span>(<span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span>);
         },
-        <span class="pl-en">notFound</span>: <span class="pl-k">function</span> (<span class="pl-smi">context</span>) {
+        <span class="pl-en">notFound</span><span class="pl-k">:</span> <span class="pl-k">function</span> (<span class="pl-smi">context</span>) {
             <span class="pl-k">return</span> <span class="pl-s"><span class="pl-pds">"</span>&lt;div class='typeahead-empty'&gt; No result for <span class="pl-cce">\"</span><span class="pl-pds">"</span></span> <span class="pl-k">+</span> context.query <span class="pl-k">+</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>&lt;/div&gt;<span class="pl-pds">"</span></span>
         }
     }
@@ -158,6 +217,16 @@ $(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="p
 We support path (things.this.that).</p>
 
 <div class="highlight highlight-javascript"><pre>Fields <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>cliche a paris, the<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>john middlename doe<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>1977<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>story<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>boy<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>00-11-22<span class="pl-pds">"</span></span>]</pre></div>
+
+<p>Note: you can use the wildcard <code>*</code> to process array of objects or dictionary of objects<br>
+<code>myArray.*.property</code> is equivalent of</p>
+
+<pre><code>myArray.0.property
+myArray.1.property
+myArray.2.property
+  ...
+myArray.N.property
+</code></pre>
 
 <h3>
 <a id="field-priority" class="anchor" href="#field-priority" aria-hidden="true"><span class="octicon octicon-link"></span></a>Field priority</h3>
