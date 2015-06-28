@@ -22,8 +22,8 @@
 <h1>FuzzySearch Demo</h1>
 
 <p>Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. </p>
-<p>This demo is for a minimal setup with a list of string source</p>
 <p>List is from the <a href="http://www.nytimes.com/ref/movies/1000best.html">New York Times top 1000 movie list</a>. </p>
+<p>This demo is for a minimal setup with a list of string source, of <a href="movies.json">about 20kb</a></p>
 
 
 <h2>Using Twitter Typeahead</h2>
@@ -68,18 +68,40 @@
 
     $.ajaxSetup({cache: true});
 
-    function setsource(url, keys) {
+    function setsource(url, keys, output) {
         $.getJSON(url).then(function (response) {
             fuzzyhound.setOptions({
                 source: response,
-                keys: keys
+                keys: keys,
+                output_map: output
             })
         });
     }
 
-    // Load movie dataset
-    // When source is a list of string, we do not have keys to index (each item is the indexed field)
-    setsource("movies.json", []);
+    // Load movie dataset, default options are good for list of string.
+    setsource("movies.json");
+
+
+    //This would be equivalent. (Note that "root." on output is optional)
+    //setsource("movies.json","","root.item");
+
+    //Source is a bit more complex, but we output a list of string
+    //setsource("books.json","item.title","item.title");
+
+    //For multiple keys to index keys is an array. Also note that "item." is optional on keys
+    //setsource("books.json",["title","author"],"item.title");
+
+    // To make sens of the optional prefix you can think that
+    // - "item" alwais refer to your data, an item in the source array
+    // - "root" refer to an object that hold your data with additional information.
+    //
+    // output_map="", output_map="." or output_map="root" allow to get SearchResult object
+    // this is needed to get score or matching field of item
+
+
+
+
+
 
 
 </script>

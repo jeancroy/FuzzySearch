@@ -25,86 +25,26 @@ It perform three kind of operation:
 
     Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed. Then we compute matching characters between the two tokens, taking special care to output the most compact match when multiple one are possible.
 
+How is it different ?
+-----------------------
+First of all it is built from the ground up to support query with multiple words. This mean the behavior is tuned to act more like a search engine than a spellchecker.
+The multiple keyword search is possible not only by using appropriate loops, but using an algorithm that support scoring multiple query at the same time.
+
+Also the scoring algorithm is based on the Longest common sub-sequence problem, 
+so one might be interested to look at this algorithm as an alternative to multiple project that use Levenshtein edit distance. We beleive LCS is better suited than edit distance for autocomplete scenario.
+
+Lastly we aim to be both fast and versatile. This mean some micro optimisation, but also a good choice of algorithm. Usually both goal are contradictory and they are in this case too.
+However this project was also a fun-with-algorithms project and we use 4 different algorithms that solve almost the same problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight)
+So whatever you are trying to do there's some fast path for it. The highlight algorithm would have worked on everything, but it also solve the hardest problem, so it would have made little sens to do all that extra work on item we would discard later.
+ 
+
+
+
 Can I see a demo ?
 ------------------
 
- You can view the demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html) If you are juste getting started, you can see a minimal setup [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html) 
-
-Is this based on edit distance ?
---------------------------------
-Short answer: No. Medium answer: Sort of. Long answer: there's a whole section below about how we calculate a score.
-
-All this to say, this provide a different scoring than typical levenshtein distance, it might be better or worse suited to your application. For example in suggest-as-you-type scenario it might be better to show vague suggestion than nothing. For situation where we ask if two things are the same (person, address, etc) it might be better to have more strict positive matches.
-
-
-What is LCS ?
-----------------------
-Longest common sub-sequence. Shared character between two string in the right order. lcs(survey, surgery) = surey.
-
-Computer science often think similarity between two string in term of error (distance). And computational biology in term of matches. (We can view matching in Proteins, DNA, etc as a string problem).
-
-They are related but different problem and the bet of this project is that LCS could be useful for auto-complete scenario (with some help). As a bonus it's often faster to compute.
-
-Algorythm
-=========
-The whole library is a very elaborate suport arround the following snippet.
-Let `strA` be the query, position of each character is recorded for fast search later. Let `strB` be the entry in the database we are trying to score. Second loop is the important part. One lookup and 4 bit operation per character of `strB`. That's where speed is.
-
-
-```javascript
-var m = strA.length;
-var n = strB.length;
-var aMap = {};
-
-// - - - - - - - -
-// PRECOMPUTE:
-// - - - - - - - -
-
-//Map position of each character of a (first char is lsb, so rigth to left)
-// --------------"retcarahc"
-// aMap["a"] =  0b000010100
-
-for (i = 0; i < m; i++) {
-    aMap[strA[i]] |= (1 << i)
-}
-
-var mask = ( 1 << m ) - 1;
-var S = mask, U;
-
-// - - - - - - - -
-// For each item
-// - - - - - - - -
-
-// Fill LCS dynamic programing table
-// bitvetor S record position of increase.
-// Whole line computed in parralel !
-// (Same cost to update 1 bit or 32)
-// See Hyyrö, 2004 with S representing V'
-
-for (j = 0; j < n; j++) {
-    U = S & aMap[strB[j]];
-    S = (S + U) | (S - U);
-}
-
-S = ~S & mask;
-//Count the numer of bit set (1) in S.
-//this give you number of matching character (llcs) in strA, strB.
-//We'll see below there's still improvement that can be made to this score.
-```
-
-This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
-Plus no elaborate data structure so constant should be low. Count dictionary as elaborate ? Maybe, but whole javascript is built around dictionary, even plain array.
-
-V2
-----
-
-Just after we tell you how bit parralelism allow to process a 30 char search at the same cost of a single char,
-we go on and apply the algorithm on english word using of about 5 char, and we use 5 out of 30 available bits.
-V2 use a mofified algorithm that allow to pack multiple words in a single 32bit numbers and keep independent score for each word.
-(For example we can use a single pass to process 6 words of 5 char) instead of 6 different pass. 
-
-Theoretical speedup is important.  However it make scoring more complex, so in the above case we have a speedup of about 2x instead of 6x or so.
-There's probably room to improve the code.
+ You can view the main demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)    
+ If you want to see a simple minimal setup, it's [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html) 
 
 Basic usage
 =====================
@@ -117,7 +57,7 @@ Then use the method search to perform a search
 
 ```javascript
     var data = ["survey","surgery","insurgence"];
-    var searcher = new FuzzySearch({source:data, output_map:"item"});
+    var searcher = new FuzzySearch({source:data});
     var query = "assurance";
     var result = searcher.search(query)
 ```
@@ -129,32 +69,19 @@ FuzzySearch support the \__ttAdapter interface so it can be used instead of a Bl
 
 ```javascript
 var books = [{"title":"First Book", "author":"John Doe"}, {"title":"...", "author":"..."}];
-var fuzzyhound = new FuzzySearch({source:data, keys:["title","author"], output_map:"" });
+var fuzzyhound = new FuzzySearch({source:books, keys:["title","author"] });
 
-$('#typeahead-input').typeahead({ minLength: 2 }, {
-    name: 'fuzzyhound',
-    source: fuzzyhound,
-    display: "item.title",
-    templates: {
-        suggestion: function (suggestion) {
-            var item = suggestion.item;
-            var query = suggestion._query;
-            return [
-                "<div>",
-                "<span class='title'>", fuzzyhound.highlight(query, item.title), "</span>|",
-                "<span class='author'>", fuzzyhound.highlight(query, item.author), "</span><br>",
-                "<span class='score'>( ", suggestion.match, " : ", suggestion.score.toFixed(2), " )</span>",
-                "</div>"
-
-            ].join("");
+$('#typeahead-input').typeahead({
+            minLength: 2,
+            highlight: false //let FuzzySearch handle highlight
         },
-        notFound: function (context) {
-            return "<div class='typeahead-empty'> No result for \"" + context.query + "\"</div>"
-        }
-    }
-
-
-}
+        {
+            name: 'movies',
+            source: fuzzyhound,
+            templates: {
+                suggestion: function(result){return "<div>"+fuzzyhound.highlight(result.title)+" by "+fuzzyhound.highlight(result.author)"</div>"}
+            }
+        });
 ```
 
 
@@ -167,6 +94,7 @@ Scoring an item
 ----------------
 
 FuzzySearch support quite complex items, query is compared to specified field.
+Suppose we have an array of books, where each book looks like this:
 
 ```javascript
     book = {
@@ -460,8 +388,57 @@ Configuration
 | highlight_after          |  ...    | after the highlight <br> `default: </strong>`   |
 
 
+Algorythm
+=========
+The whole library is a very elaborate suport arround the following snippet.
+Let `strA` be the query, position of each character is recorded for fast search later. Let `strB` be the entry in the database we are trying to score. Second loop is the important part. One lookup and 4 bit operation per character of `strB`. That's where speed is.
 
-Algorithms
+
+```javascript
+var m = strA.length;
+var n = strB.length;
+var aMap = {};
+
+// - - - - - - - -
+// PRECOMPUTE:
+// - - - - - - - -
+
+//Map position of each character of a (first char is lsb, so rigth to left)
+// --------------"retcarahc"
+// aMap["a"] =  0b000010100
+
+for (i = 0; i < m; i++) {
+    aMap[strA[i]] |= (1 << i)
+}
+
+var mask = ( 1 << m ) - 1;
+var S = mask, U;
+
+// - - - - - - - -
+// For each item
+// - - - - - - - -
+
+// Fill LCS dynamic programing table
+// bitvetor S record position of increase.
+// Whole line computed in parralel !
+// (Same cost to update 1 bit or 32)
+// See Hyyrö, 2004 with S representing V'
+
+for (j = 0; j < n; j++) {
+    U = S & aMap[strB[j]];
+    S = (S + U) | (S - U);
+}
+
+S = ~S & mask;
+//Count the numer of bit set (1) in S.
+//this give you number of matching character (llcs) in strA, strB.
+//We'll see below there's still improvement that can be made to this score.
+```
+
+This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
+
+
+References
 ==========
 
 Main bitvector algorythm
