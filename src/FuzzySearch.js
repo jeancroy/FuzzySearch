@@ -61,6 +61,7 @@
 
         sorter: compareResults,          // Function used to sort. See signature of Array.sort(sorter)
 
+        /**@type {string|function}*/
         output_map: "item",              // Transform the output, can be a function or a path string.
                                          // output_map="root" return SearchResult object, needed to see the score
                                          // output_map="root.item" return original object.
@@ -983,7 +984,7 @@
      * Like Array.prototype.map()
      *
      * @param {Array} source
-     * @param {function(*, number , Array)|null} transform callback
+     * @param {function} transform callback
      * @param {*=} context thisarg
      * @param {number=} max_out
      * @returns {Array}

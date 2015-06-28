@@ -25,6 +25,12 @@ It perform three kind of operation:
 
     Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed. Then we compute matching characters between the two tokens, taking special care to output the most compact match when multiple one are possible.
 
+Can I see a demo ?
+------------------
+
+ You can view the main demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)    
+ If you want to see a simple minimal setup, it's [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html) 
+ 
 How is it different ?
 -----------------------
 First of all it is built from the ground up to support query with multiple words. This mean the behavior is tuned to act more like a search engine than a spellchecker.
@@ -37,14 +43,6 @@ Lastly we aim to be both fast and versatile. This mean some micro optimisation, 
 However this project was also a fun-with-algorithms project and we use 4 different algorithms that solve almost the same problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight)
 So whatever you are trying to do there's some fast path for it. The highlight algorithm would have worked on everything, but it also solve the hardest problem, so it would have made little sens to do all that extra work on item we would discard later.
  
-
-
-
-Can I see a demo ?
-------------------
-
- You can view the main demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)    
- If you want to see a simple minimal setup, it's [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html) 
 
 Basic usage
 =====================
@@ -76,10 +74,10 @@ $('#typeahead-input').typeahead({
             highlight: false //let FuzzySearch handle highlight
         },
         {
-            name: 'movies',
+            name: 'books',
             source: fuzzyhound,
             templates: {
-                suggestion: function(result){return "<div>"+fuzzyhound.highlight(result.title)+" by "+fuzzyhound.highlight(result.author)"</div>"}
+                suggestion: function(result){return "<div>"+fuzzyhound.highlight(result.title)+" by "+fuzzyhound.highlight(result.author)+"</div>"}
             }
         });
 ```
@@ -174,7 +172,7 @@ Score is average of
  1. best score, every query token on the best field for the item
  2. best score, every query token on any field (their best field)
 
-### Output score thresholding
+### Output score threshold
 
 Default value are for suggestion as you type. In this case we prefer to show poor matches than nothing, match will improve as we type more.
 
@@ -441,7 +439,7 @@ This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
 References
 ==========
 
-Main bitvector algorythm
+Main bit-parallel algorithm
 
 > A fast and practical bit-vector algorithm for the longest common sub-sequence problem (Crochemore 2001)
 > igm.univ-mlv.fr/~mac/REC/DOC/01-lcs_ipl.ps
@@ -461,11 +459,11 @@ Pack multiple token into a single parallel computation
 > for Approximate and Multiple String Matching (Hyyrö 2006)
 > http://www.dcc.uchile.cl/~gnavarro/ps/jea06.pdf
 
-Sequence alignment (highligth)
+Sequence alignment (highlight)
 > Smith Waterman Gotoh
 > http://www.bioinf.uni-freiburg.de/Lehre/Courses/2014_SS/V_Bioinformatik_1/gap-penalty-gotoh.pdf
 > http://telliott99.blogspot.ca/2009/08/alignment-affine-gap-penalties_08.html
 
-Compaison of some string similarity
+Comparison of some string similarity measurements
 > https://asecuritysite.com/forensics/simstring
 
