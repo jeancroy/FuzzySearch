@@ -10,7 +10,9 @@
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
     <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
+
     <script src="../dist/FuzzySearch.min.js"></script>
+    <!--script src="../src/FuzzySearch.js"></script-->
     <script src="../dist/Highlight.FS.min.js"></script>
 
 
@@ -23,28 +25,7 @@
 <p>Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. </p>
 <p>Want a minimal setup demo? it's  <a href="https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html">here</a>. </p>
 
-<h2>Dataset</h2>
 
-<p>
-    <form>
-        <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about
-            2kb</a> </label>
-        <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
-            220kb</a> </label>
-
-        <br><br>
-        <label> <input type="checkbox" name="free" id="free" checked /> Enable per token score </label><br>
-        <table style="text-align: left; display:block; width:90%; margin:auto; max-width:600px;vertical-align: top;margin-top:0">
-            <tr><td><strong>Enable:</strong></td><td>Allow free word order, try to respect word boundary &amp;  match start of words, Different words can match different fields. Friendlier for complete sentences !</td></tr>
-            <tr><td><strong>Disable:</strong></td><td>Very fast ! Match whole query against whole field. All character in order, score best field for each item. If your dataset have one word per item, (or one word per field) this might be the best option for you</td></tr>
-        </table>
-
-        <br><br>
-        <label> <input type="checkbox" name="fused" id="fused" /> Enable fused score </label><br>
-        (Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war")
-
-    </form>
-</p>
 
 <h2>Using Twitter Typeahead</h2>
 
@@ -59,6 +40,46 @@
     <input id="demo-query-ui-auto" class="twitter-typeahead" name="demo-query-ui-auto" autocomplete="off" type="text">
 </div>
 
+
+
+<form>
+        <h2>Dataset</h2>
+
+        <div style="text-align: left; display:block; width:90%; max-width:400px; margin:auto" >
+
+            <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about
+                2kb</a>* </label><br>
+
+            <label><input type="radio" name="source" value="medium"/> Medium movie dataset, list of title <a href="movies.json">about
+                20kb</a> </label><br>
+
+
+            <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
+                220kb</a> </label><br><br>
+
+
+            <div>
+                * small book dataset is provided for comparison against a good edit distance implementation <a href="http://kiro.me/projects/fuse.html">fuse.js</a> (or <a href="http://kiro.me/exp/fuse.html">demo</a>)
+            </div>
+
+        </div>
+
+        <h2>Options</h2>
+
+        <label> <input type="checkbox" name="free" id="free" checked /> Enable per token score </label><br>
+        <table style="text-align: left; display:block; width:90%; margin:auto; max-width:600px;vertical-align: top;margin-top:0">
+            <tr><td><strong>Enable:</strong></td><td>Allow free word order, try to respect word boundary &amp;  match start of words, Different words can match different fields. Friendlier for complete sentences !</td></tr>
+            <tr><td><strong>Disable:</strong></td><td>Very fast ! Match whole query against whole field. All character in order, score best field for each item. If your dataset have one word per item, (or one word per field) this might be the best option for you</td></tr>
+        </table>
+
+        <br><br>
+        <label> <input type="checkbox" name="fused" id="fused" /> Enable fused score </label><br>
+        (Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war")
+
+</form>
+
+
+
 <!-- allow to scroll so autocomplete is at top of page -->
 <div style="height: 500px;"></div>
 
@@ -69,28 +90,29 @@
     // We will fill the data once we have the JSON loaded
     //
 
-    var fuzzyhound = new FuzzySearch({output_limit: 6, output_map:"root"});
+    var fuzzyhound = new FuzzySearch({output_limit: 6, output_map:"alias"});
+
+    // output_limit: number of item to return
+    //
+    // output_map:"alias" : Build a custom output object.
+    //                      This can be used to reuse same template with different source format
+    //                      Input - Output mapping is set using keys options see "Dataset switch UI" below
 
 
     // - - - - - - - - - - - - - - - - - - - - - - -
-    //    Item template, shared for both autocompletes
+    //    Item template, shared for both auto-completes
     // - - - - - - - - - - - - - - - - - - - - - - -
 
     function itemTemplate(suggestion) {
 
-        var item = suggestion.item;
-        var query = suggestion._query;
-        var author = item.author || item.authors.author;
-
-        if (Object.prototype.toString.call(author) === '[object Array]') {
-            author = author.join(", ");
-        }
+        //This template is the same despite the fact source input change format.
+        //This is because we use alias option to transform output.
 
         return [
             "<div>",
-            "<span class='title'>\"", fuzzyhound.highlight(item.title), "\"</span>",
-            "<span class='author'>  by ", fuzzyhound.highlight(author), "</span>",
-            "<span class='score'>(&nbsp;", suggestion.score.toFixed(2), "&nbsp;)</span>",
+            "<span class='title'>\"", fuzzyhound.highlight(suggestion.title), "\"</span>",
+            "<span class='author'>", (suggestion.author)? " by " + fuzzyhound.highlight(suggestion.author): "" , "</span>",
+            "<span class='score' title='", suggestion._match ,"'>(&nbsp;", suggestion._score.toFixed(2), "&nbsp;)</span>",
             "</div>"
         ].join("");
 
@@ -120,7 +142,7 @@
             },
             {
                 name: 'books',
-                limit: 100, // let fuzzyhound apply limit
+                limit: 100, // let fuzzyhound.output_limit apply limit
                 source: fuzzyhound,
                 display: "item.title",
                 templates: {
@@ -134,41 +156,35 @@
             });
 
 
-    //- - - - - - - - - - --
-    //    Jquery UI Auto complete Setup
+    //- - - - - - - - - - -
+    //    Jquery UI Setup
     // - - - - - - - - - - -
 
-    var $el = $("#demo-query-ui-auto");
-
-        $el.autocomplete({
-            minLength: 2,
-            delay: 0,
-            source: fuzzyhound.$uiSource(),
-            messages: {
-                noResults: '',
-                results: function () {
+    var jq_auto =
+            $("#demo-query-ui-auto").autocomplete({
+                minLength: 2,
+                delay: 150,
+                source: function (request, response) {
+                    response(fuzzyhound.search(request.term));
+                },
+                messages: {
+                    noResults: '',
+                    results: function () {
+                    }
                 }
-            }
 
-        });
+            });
 
-    //
-    // $ui autocomplete do not support template.
-    // Instead we have "extension point" which are internal rendering function we can rewrite to achieve the result we want.
-    // The plus side is that it give complete control, the bad side is that it get extremely ugly because we mix
-    // inner working with our template definition.
-    //
-
-    //Get instance of autocomplete widget
-    var $instance = $el.autocomplete("instance");
+    //Get instance to extend
+    var jq_instance = jq_auto.autocomplete("instance");
 
     //Custom item
-    $instance._renderItem = function (ul, item) {
+    jq_instance._renderItem = function (ul, item) {
         return $("<li>").append(itemTemplate(item)).appendTo(ul);
     };
 
-    //Custom menu, to insert footer
-    $instance._renderMenu = function (ul, items) {
+    //Custom footer
+    jq_instance._renderMenu = function (ul, items) {
         var nbitems = items.length, i = -1;
         while (++i < nbitems) {
             var display = items[i].item.title;
@@ -197,7 +213,6 @@
     //Load small dataset by default
     setsource("books.json", ["title", "author"]);
 
-
     // - - - - - - - - - - - -
     //   Dataset switch UI
     //- - - - - - - - - - - - -
@@ -207,7 +222,11 @@
         switch (this.value) {
 
             case "large":
-                setsource("books_large.json", ["title", "authors.author"]);
+                setsource("books_large.json", {title:"title", author:"authors.author"} );
+                break;
+
+            case "medium":
+                setsource("movies.json", {title:"."} ); //Movie is a list of title. Set output.title to the item
                 break;
 
             case "small":
@@ -216,12 +235,8 @@
                 break;
         }
 
+
     });
-
-    // - - - - - - - - - - - -
-    //   Option UI
-    //- - - - - - - - - - - - -
-
 
     $('#free').change(function () {
         fuzzyhound.setOptions({

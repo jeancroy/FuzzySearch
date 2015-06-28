@@ -69,8 +69,8 @@
         var opt_score_tok = options.score_per_token;
         var opt_fuse = options.score_test_fused;
 
-        var aa = FuzzySearch.normalize(a);
-        var bb = FuzzySearch.normalize(b);
+        var aa = options.normalize(a);
+        var bb = options.normalize(b);
 
         var a_tokens = aa.split(" ");
         var b_tokens = bb.split(" ");

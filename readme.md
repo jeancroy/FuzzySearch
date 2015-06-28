@@ -11,13 +11,13 @@ It perform three kind of operation:
 1. Searching
 
     Perform the scoring operation on all item keyword.  
-    Manage logic of why an item would have a better overall score than another given multiple axproximately matched keyword
+    Manage logic of why an item would have a better overall score than another given multiple approximately matched keyword
 
 2. Scoring
 
-    Given two word how clore are they ?  
+    Given two word how close are they ?  
     Is word A closer to B or to C ? Is Match(A,B) worth less or more than Match(C,D) ?  
-    We try to answer those question in an autcomplete scenario. Error in what is already typed probably worth more than a character not yet typed.
+    We try to answer those question in an autocomplete scenario. Error in what is already typed probably worth more than a character not yet typed.
     This would not be the case in a spellchecker setup for example.
 
 
@@ -31,17 +31,40 @@ Can I see a demo ?
  You can view the main demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)    
  If you want to see a simple minimal setup, it's [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html) 
  
-How is it different ?
+Why a suggestion engine ?
+------------------------
+
+Because most fuzzy string project are basically a scoring algorithm with a loop to apply it on a list of string as if each string was a single word.
+This is perfect for auto correct scenario, but can lack if we deal with object or sentences rater than words. 
+
+This project add infrastructure to take about any kind of input and loop the scoring algorithm over each words, of specified field, of your objects.
+Then It'll put together a score that take into account multiple words or multiple fields that matches. Finally it'll allow you to transform the output to your liking for display. 
+
+We aim to be a plug and play approximate string matching search engine, that's aware of your data structure. You provide your favorite UI library and we provide quality matches for your query data crunching.
+ 
+How is this library different ?
 -----------------------
-First of all it is built from the ground up to support query with multiple words. This mean the behavior is tuned to act more like a search engine than a spellchecker.
-The multiple keyword search is possible not only by using appropriate loops, but using an algorithm that support scoring multiple query at the same time.
 
-Also the scoring algorithm is based on the Longest common sub-sequence problem, 
-so one might be interested to look at this algorithm as an alternative to multiple project that use Levenshtein edit distance. We beleive LCS is better suited than edit distance for autocomplete scenario.
+- Scoring each item as a sentences of a single word is probably a good selling point, even if you do not need more complicated input/output capabilities.
+  And while the extra loop is not that hard, the algorithm used for the character-by-character "hot loop" support scoring multiple query in parallel, so we are very efficient at solving that task.
 
-Lastly we aim to be both fast and versatile. This mean some micro optimisation, but also a good choice of algorithm. Usually both goal are contradictory and they are in this case too.
-However this project was also a fun-with-algorithms project and we use 4 different algorithms that solve almost the same problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight)
-So whatever you are trying to do there's some fast path for it. The highlight algorithm would have worked on everything, but it also solve the hardest problem, so it would have made little sens to do all that extra work on item we would discard later.
+- We use bit-parallelism to have a very compact representation of the problem  and speed-up the search. The idea is that changing one bit or changing 32 bit in an integer take the same amount of time. This basically mean we can search for a 2 character words or 30 character words with the same amount of computation. However 30 character words are quite rare. So we use a modified algorithm that pack multiple words in the same query. For example we could pack six 5 characters words in the same query.
+
+- Have more than 32 chars ? No problem ! We'll use as many bit-packed query as you need to search for the whole data. Have a single word bigger than 32 char ? A System.Namespace.Library.something.field symbol maybe ? No problem, we got you covered and we'll transparently switch to an non bit-vector based implementation. 
+
+- Focus on speed is not there to be frugal or beat benchmarks, instead we use it to compute more things and try to be as user-friendly as possible with the computation budget.
+
+- Scoring is based on a exact problem like (Levenshtein edit distance) [https://en.wikipedia.org/wiki/Levenshtein_distance],
+  but we focus on similarities instead of distance, using (Longest common subsequence)[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem].
+  When searching from a list of string with different length, there's quite a bit of difference between `the most similar` and the `least errors`.
+  We believe looking at similarities give intuitive results for an autocomplete scenario. (you can see a discussion about scoring below)
+  
+A note about speed
+-------------------
+
+There's a few thing we have tried, one common pattern is to cache loop invariant quantities, another thing we tried to ensure is that frequently used variable are statically typed to avoid deoptimisations. But the most important contribution to speed is algorithm: we can try to find a fast way to compute something, but we can gain more if we find something else easier to compute that is somehow equivalent.
+
+The problem then is that the general case is not always equivalent to the easier problem we are trying to solve. So for that reason we provide 4 different algorithms that solve almost the same problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight) There's no configuration we'll switch transparently to the best algorithm for the task. So whatever you are trying to do there's some fast path for it. 
  
 
 Basic usage
@@ -107,25 +130,49 @@ Suppose we have an array of books, where each book looks like this:
 
 ### Collect information (And normalize)
 
+First step is to tell FuzzySearch what key to index:  
+
+- `keys = "" or [] or undefined` This indicate source is a list of string, index item directly  
+- `keys = "title" or ["title"]` This indicate index a single field `title`  
+- `keys = ["title","author.fullname"]` This indicate index multiple fields
+- `keys = {title:"title",author:"author.fullname"}` This indicate index multiple fields and setup aliases/tags
+
+for all the above syntax you can optionally add a path prefix `item.`:
+all the following are equivalent: `title`, `.title` , `item.title`
+
+
+#### Example
+
+With the above book object and this set of keys:
+
 ```javascript
 keys = ["Title","Author","Year","Keywords","Reference.ISSN"]
 ```
 
-First thing we do is to build a list of field value, normalized to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
-We support path (things.this.that).
+First thing we do is to build a list of field values. Then normalize the text to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
+We nested path (things.this.that).
 
 ```javascript
-Fields = ["cliche a paris, the","john middlename doe","1977","story","boy","00-11-22"]
+Fields = [ ["cliche a paris, the"],
+           ["john middlename doe"],
+           ["1977"],
+           ["story","boy"],
+           ["00-11-22"]
+           ]
 ```
 
-Note: you can use the wildcard `*` to process array of objects or dictionary of objects  
-`myArray.*.property` is equivalent of
+#### wildcard
 
+Note: you can use the wildcard `*` to process array of objects or dictionary of objects  
+`myArray.*.property` is equivalent of adding
+
+```javascript
     myArray.0.property
     myArray.1.property
-    myArray.2.property
       ...
     myArray.N.property
+```
+
 
 ### Field priority
 
@@ -161,12 +208,13 @@ Flip side of allowing free word order is preferring properly ordered words. This
 
 ### Multiple field matching
 
+This query would match in both `title` and `year` field:
+
 > cliche 1977
 
-This query would match in both `title` and `year` field.
 Flip side of allowing Multiple field matching is giving preference to words in the same field:
 
- >"john doe", two word, same field
+> "john doe", two word, same field
 
 Score is average of
  1. best score, every query token on the best field for the item
@@ -192,24 +240,50 @@ Lastly if an item have multiple keyword, we might want to stop searching once we
 
 #### Full detail
 
-Setting `outputmap=""` return the object as we use internally for sorting and scoring
+Setting `output_map="root"` return the object as we use internally for sorting and scoring
 
 ```javascript
     candidate = {
         score:8.1,
         item:{}, //original item
-        match:"1977",
         matchIndex:2
     }
 ```
 
-#### Original detail
+you can use .getMatchingField() to recover matching field.
 
-Setting `outputmap="item"` give you back original item as given to the algorithm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)
+#### Original object
+
+Setting `output_map="item"` or `output_map="root.item"` give you back original item as given to the algorithm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)
+
+#### Aliases
+
+You can set `keys` to key-value pair of {output:input} and `output_map="alias"`.
+In that case we'll produce the requested format for you. If output is an array we'll apply `options.join_str` to join the elements (default to `", "`)
+
+Example Input: 
+```javascript
+    keys = {
+        title:"item.title",
+        authors:"item.authors.*.Fullname",
+    }
+```
+
+Example output: 
+```javascript
+    result = {
+        title:"Some book",
+        authors:"John Doe, Someone Else",
+        _match:"John Doe",
+        _score:8,
+        _item: {/*original object*/}
+    }
+```
+
 
 #### Property of an original item
 
-If you only need the id or title of the original item you can do it like that `outputmap="item.property"`
+If you only need the id or title of the original item you can do it like that `output_map="item.property"` or `output_map="root.item.property"`
 
 
 
