@@ -49,8 +49,8 @@
                                           // if false, bypass at least half the computation cost, very fast
                                           // also disable different token that score different field, because no more token!!
 
-        score_test_fused: false,           // Try one extra match where we disregard token separation.
-        // "oldman" match "old man"
+        score_test_fused: false,          // Try one extra match where we disregard token separation.
+                                          // "oldman" match "old man"
 
         //
         //  Output sort & transform
@@ -60,6 +60,7 @@
         output_limit: 0,                 // Return up to N result, 0 to disable
 
         sorter: compareResults,          // Function used to sort. See signature of Array.sort(sorter)
+        normalize: normalize,            // Function used to transform string (lowercase, accents, etc)
 
         /**@type {string|function}*/
         output_map: "item",              // Transform the output, can be a function or a path string.
@@ -70,6 +71,8 @@
                                          //
                                          // output_map=function(root){ return something(root.item) }
                                          // ^this get original object and apply something() on it.
+
+        join_str:", ",                   //String used to join array fields
 
         //
         //  Tokens options
@@ -102,6 +105,7 @@
 
         source: [],
         keys: [],
+        tags: [],
         dirty: false, // set to true to request a new lazy index pass. (index recomputed only on next search)
         index: [],    // source is processed using keys, then stored here
 
@@ -159,16 +163,55 @@
 
         }
 
-        if ("output_map" in options && typeof options.output_map == "string")
-            self.output_map = removePrefix(self.output_map,["root","."]);
+        if ("output_map" in options && typeof options.output_map === "string"){
+            if(self.output_map==="alias") self.output_map = self.aliasResult;
+            else self.output_map = removePrefix(self.output_map, ["root", "."]);
+        }
 
-        if("keys" in options && typeof options.keys == "string")
-            self.keys = options.keys.length ? [options.keys] : [];
+        //
+        // Input stage, work to allow different syntax for keys definition is done here.
+        //
 
-        if ( ("source" in options) ||  ("keys" in options) ) {
+        var okeys;
+        if ("keys" in options && ( okeys = options.keys) !== undefined) {
 
-            self.keys = FuzzySearch.map( self.keys, function(k){ return removePrefix(k,["item","."]) } );
-            FuzzySearch.addSource(self, self.source, self.keys, true);
+            var key_type = Object.prototype.toString.call(okeys);
+            var key_len = okeys.length;
+
+            self.tags = null;
+
+            if (key_type === "[object String]") {
+                self.keys = key_len ? [okeys] : [];
+            }
+
+            else if (key_type === "[object Object]") {
+
+                self.keys = new Array(key_len);
+                self.tags = new Array(key_len);
+                var keyi = 0;
+
+                for (var tag in okeys) {
+                    if (okeys.hasOwnProperty(tag)) {
+                        self.tags[keyi] = tag;
+                        self.keys[keyi] = okeys[tag];
+                        keyi++;
+                    }
+                }
+
+            }
+
+            self.keys = FuzzySearch.map(self.keys, function (k) {
+                return removePrefix(k, ["item", "."])
+            });
+
+            if(!self.tags) self.tags = self.keys;
+
+        }
+
+
+        if (("source" in options) || ("keys" in options)) {
+
+            self._prepSource( self.source, self.keys, true);
             self.dirty = false;
 
         }
@@ -181,68 +224,17 @@
      * @param {Array<string>} prefixes to remove
      * @returns {string}
      */
-    function removePrefix (str, prefixes){
+    function removePrefix(str, prefixes) {
         var n = prefixes.length;
         var offset = 0;
 
-        for(i=-1;++i<n;){
-            var p=prefixes[i], l = p.length;
-            if(str.substr(offset, l) === p) offset += l;
+        for (i = -1; ++i < n;) {
+            var p = prefixes[i], l = p.length;
+            if (str.substr(offset, l) === p) offset += l;
         }
 
-        return (offset>0) ? str.substr(offset):str;
+        return (offset > 0) ? str.substr(offset) : str;
     }
-
-
-
-    /**
-     * Add or replace data to search in.
-     * Flatten object into array using specified keys,
-     * Apply lowercase, accent removal
-     * Split field into token
-     * Remove small token eg "a" "of" and prefix large token
-     *
-     * @param {FuzzySearch} self
-     * @param {Array.<Object>} source
-     * @param {Array.<string>} keys
-     * @param {boolean} overwrite
-     * @return {FuzzySearch} self
-     *
-     */
-
-    FuzzySearch.addSource = function (self, source, keys, overwrite) {
-
-        var nb_items = source.length, out_index;
-
-        if (overwrite) {
-            self.index = new Array(nb_items);
-            out_index = 0
-        } else
-            out_index = nb_items;
-
-        var index = self.index;
-        var min_size = self.token_field_min_length;
-        var max_size = self.token_field_max_length;
-
-        for (var item_index = -1; ++item_index < nb_items;) {
-
-            var item = source[item_index];
-            var item_fields = FuzzySearch.generateFields(item, keys);
-
-            var nb_fields = item_fields.length;
-            var fields = new Array(nb_fields);
-
-            for (var field_index = -1; ++field_index < nb_fields;) {
-                fields[field_index] = FuzzySearch.filterSize(FuzzySearch.normalize(item_fields[field_index]).split(" "), min_size, max_size);
-            }
-
-            index[out_index++] = new Indexed(item, fields);
-
-        }
-
-        return self;
-
-    };
 
 
     //
@@ -256,16 +248,14 @@
      * @param {Array.<PackInfo>} tokens_groups
      * @param {string} fused_str
      * @param {Object} fused_map
-     * @param {boolean} single
      * @constructor
      */
-    function Query(normalized, tokens_groups, fused_str, fused_map, single) {
+    function Query(normalized, tokens_groups, fused_str, fused_map) {
         this.normalized = normalized;
         this.tokens_groups = tokens_groups;
         this.fused_str = fused_str;
         this.fused_score = 0;
         this.fused_map = fused_map;
-        this.single = single
     }
 
     /**
@@ -297,15 +287,17 @@
      * @param {Array} fields
      * @param {number} item_score
      * @param {number} matched_field_index
+     * @param {number} matched_field_sub
      * @param {string|number} sortkey
      * @constructor
      * @extends Indexed
      */
-    function SearchResult(item, fields, item_score, matched_field_index, sortkey) {
+    function SearchResult(item, fields, item_score, matched_field_index,matched_field_sub, sortkey) {
         this.item = item;
         this.fields = fields;
         this.score = item_score;
         this.matchIndex = matched_field_index;
+        this.subIndex = matched_field_sub;
         this.sortKey = sortkey;
     }
 
@@ -369,7 +361,7 @@
             this.start_time = time_start;
 
             if (this.dirty) {
-                FuzzySearch.addSource(this, this.source, this.keys, true);
+                this._prepSource(this.source, this.keys, true);
                 this.dirty = false;
             }
 
@@ -377,6 +369,7 @@
             var source = this.index;
             var results = [];
 
+            // ---- MAIN SEARCH LOOP ---- //
             var thresh_include = this._searchIndex(query, source, results);
 
             //keep only results that are good enough compared to best
@@ -384,11 +377,11 @@
 
             // sort by decreasing order of score
             // equal rounded score: alphabetical order
-            if (typeof this.sorter == "function")
+            if (typeof this.sorter === "function")
                 results = results.sort(this.sorter);
 
             if (this.output_map || this.output_limit > 0) {
-                if (typeof this.output_map == "function")
+                if (typeof this.output_map === "function")
                     results = FuzzySearch.map(results, this.output_map, this, this.output_limit);
                 else
                     results = FuzzySearch.mapField(results, this.output_map, this.output_limit);
@@ -424,8 +417,6 @@
             var thresh_include = this.thresh_include;
             var best_item_score = 0;
 
-            var single = query.single;
-
             for (var item_index = -1, nb_items = source.length; ++item_index < nb_items;) {
 
                 //get indexed fields
@@ -449,6 +440,7 @@
 
                 var item_score = 0;
                 var matched_field_index = -1;
+                var matched_node_index = -1;
                 var position_bonus = 1.0;
 
                 //
@@ -457,17 +449,24 @@
 
                 for (var field_index = -1, nb_fields = item_fields.length; ++field_index < nb_fields;) {
 
-                    var field_score;
+                    var field_score = 0;
+                    var field_node = -1;
+                    var field = item_fields[field_index];
 
-                    if (opt_score_tok) {
+                    for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
+                        var node_score, node = field[node_index];
 
-                        if (single)
-                            field_score = this._scoreFieldSingle(item_fields[field_index], query);
+                        if (opt_score_tok) {
+                            node_score = this._scoreField(node, query);
+                        }
                         else
-                            field_score = this._scoreField(item_fields[field_index], query);
+                            node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, this);
+
+                        if (node_score > field_score){
+                            field_score = node_score;
+                            field_node = node_index;
+                        }
                     }
-                    else
-                        field_score = FuzzySearch.score_map(query.fused_str, item_fields[field_index].join(" "), query.fused_map, this);
 
                     field_score *= (1.0 + position_bonus);
                     position_bonus *= opt_bpd;
@@ -475,6 +474,7 @@
                     if (field_score > item_score) {
                         item_score = field_score;
                         matched_field_index = field_index;
+                        matched_node_index = field_node;
 
                         if (field_score > opt_fge) break;
                     }
@@ -485,7 +485,7 @@
                 // Different query token match different fields ?
                 //
 
-                if (opt_score_tok && !single) {
+                if (opt_score_tok) {
 
                     var query_score = 0;
                     for (group_index = -1; ++group_index < nb_groups;) {
@@ -523,7 +523,8 @@
                         item_fields,
                         item_score,
                         matched_field_index,
-                        item_fields[0].join(" ")
+                        matched_node_index,
+                        item_fields[0][0].join(" ")
                     ));
 
                 }
@@ -536,7 +537,7 @@
         /**
          * Internal loop that is run for each field in an item
          *
-         * @param {Array} field_tokens - see FuzzySearch.getFields, FuzzySearch.addSource
+         * @param {Array} field_tokens
          * @param {Query} query
          * @returns {number}
          * @private
@@ -635,52 +636,6 @@
 
         },
 
-        /**
-         * Fast pass for a single token query
-         *
-         * - Tokens is the same as fused, bypass packinfo
-         * - No ordering bonus, nothing to order
-         * - No "multiple words match multiple field", single word
-         *
-         * @param {Array} field_tokens - see FuzzySearch.getFields, FuzzySearch.addSource
-         * @param {Query} query
-         * @returns {number}
-         * @private
-         */
-
-        _scoreFieldSingle: function (field_tokens, query) {
-
-            var nb_tokens = field_tokens.length;
-            var field_score = 0, sc;
-            var query_str = query.fused_str;
-            var query_map = query.fused_map;
-
-            for (var field_tk_index = -1; ++field_tk_index < nb_tokens;) {
-
-                var token = field_tokens[field_tk_index];
-                sc = FuzzySearch.score_map(query_str, token, query_map, this);
-
-                if (sc > field_score) {
-                    field_score = sc;
-                }
-
-            }
-
-            if (this.score_test_fused) {
-
-                // test "space bar is broken" no token match
-                var fused_score = FuzzySearch.score_map(query_str, field_tokens.join(" "), query_map, this);
-                field_score = fused_score > field_score ? fused_score : field_score;
-
-                if (fused_score > query.fused_score) {
-                    query.fused_score = fused_score;
-                }
-
-            }
-
-            return field_score;
-
-        },
 
         /**
          * Input: a user search string
@@ -701,13 +656,62 @@
 
         _prepQuery: function (querystring) {
 
-            var norm_query = FuzzySearch.normalize(querystring);
+            var norm_query = this.normalize(querystring);
             var tokens = (this.score_per_token) ? FuzzySearch.filterSize(norm_query.split(" "), this.token_query_min_length, this.token_query_max_length) : [];
-            var single = (tokens.length < 2);
-            var groups = (single) ? [] : FuzzySearch.pack_tokens(tokens);
-            var fused = norm_query.substring(0, (single) ? this.token_field_max_length : this.token_fused_max_length);
-            var map = (this.score_test_fused || !this.score_per_token || single) ? FuzzySearch.alphabet(fused) : {};
-            return new Query(norm_query, groups, fused, map, single)
+            var groups = FuzzySearch.pack_tokens(tokens);
+            var fused = norm_query.substring(0, this.token_fused_max_length);
+            var map = (this.score_test_fused || !this.score_per_token ) ? FuzzySearch.alphabet(fused) : {};
+            return new Query(norm_query, groups, fused, map)
+
+        },
+
+        /**
+         * Add or replace data to search in.
+         * Flatten object into array using specified keys,
+         * Apply lowercase, accent removal
+         * Split field into token
+         * Remove small token eg "a" "of" and prefix large token
+         *
+         * @param {Array.<Object>} source
+         * @param {Array.<string>} keys
+         * @param {boolean} overwrite
+         * @private
+         *
+         */
+
+        _prepSource : function ( source, keys, overwrite) {
+
+            var nb_items = source.length, out_index;
+
+            if (overwrite) {
+                this.index = new Array(nb_items);
+                out_index = 0
+            } else
+                out_index = nb_items;
+
+            var index = this.index;
+            var min_size = this.token_field_min_length;
+            var max_size = this.token_field_max_length;
+
+            for (var item_index = -1; ++item_index < nb_items;) {
+
+                var item = source[item_index];
+                var item_fields = FuzzySearch.generateFields(item, keys);
+
+                var nb_fields = item_fields.length;
+
+                for (var field_index = -1; ++field_index < nb_fields;) {
+
+                    var field = item_fields[field_index];
+                    for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
+                        field[node_index] = FuzzySearch.filterSize(this.normalize(field[node_index]).split(" "), min_size, max_size);
+                    }
+
+                }
+
+                index[out_index++] = new Indexed(item, item_fields);
+
+            }
 
         },
 
@@ -823,8 +827,32 @@
          */
 
         getMatchingField: function (result) {
-            var f = FuzzySearch.generateFields(result.item, this.keys);
-            return f[result.matchIndex]
+            var f = FuzzySearch.generateFields(result.item, [this.keys[result.matchIndex]]);
+            return f[0][result.subIndex];
+        },
+
+        /**
+         * Given a SearchResult object, generate a new object that follow alias structure
+         *
+         * @param {SearchResult} result
+         * @return {*} aliased result
+         */
+
+        aliasResult:function(result){
+
+            var f = FuzzySearch.generateFields(result.item, this.keys );
+            var out = {};
+
+            for(var i=-1, n= f.length; ++i<n;){
+                out[this.tags[i]] = f[i].join( this.join_str )
+            }
+
+            out._item = result.item;
+            out._score = result.score;
+            out._match = f[result.matchIndex][result.subIndex];
+
+            return out;
+
         }
 
     };
@@ -847,12 +875,12 @@
      * @param {string} str
      * @returns {string} - normalised str
      */
-    FuzzySearch.normalize = function (str) {
+    function normalize(str) {
         if (!str)return "";
         return str.toLowerCase().replace(/\s+/g, " ").replace(/[^\u0000-\u007E]/g, function (a) {
             return diacriticsMap[a] || a;
         });
-    };
+    }
 
 
     /**
@@ -866,12 +894,14 @@
 
     FuzzySearch.generateFields = function (obj, fieldlist) {
 
-        if (!fieldlist.length) return [obj.toString()];
+        if (!fieldlist.length ) return [[obj.toString()]];
 
-        var indexed_fields = [];
-        for (var i = 0; i < fieldlist.length; i++) {
-            _collectValues(obj, fieldlist[i].split("."), indexed_fields, 0)
-        }
+        var n = fieldlist.length;
+        var indexed_fields = new Array(n);
+
+        for (var i = -1; ++i < n;)
+            indexed_fields[i] = _collectValues(obj, fieldlist[i].split("."), [], 0);
+
         return indexed_fields;
 
     };
@@ -895,11 +925,10 @@
         var nb_level = parts.length;
         while (level < nb_level) {
 
-            key = parts[level];
+            key = parts[level++];
             if (key === "*" || key === "") break;
             if (!(key in obj)) return list;
             obj = obj[key];
-            level++
 
         }
 
@@ -931,7 +960,6 @@
 
         else if (key === "*") {
 
-            level++;
             if (isArray) {
                 olen = obj.length;
                 for (i = -1; ++i < olen;) {
