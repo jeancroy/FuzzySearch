@@ -36,111 +36,22 @@
 <h2>
 <a id="what-is-fuzzysearchjs-" class="anchor" href="#what-is-fuzzysearchjs-" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is FuzzySearch.js ?</h2>
 
-<p>It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object. This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.</p>
-
-<p>It perform three kind of operation:</p>
-
-<ol>
-<li>
-<p>Searching</p>
-
-<p>Perform the scoring operation on all item keyword.<br>
-Manage logic of why an item would have a better overall score than another given multiple axproximately matched keyword</p>
-</li>
-<li>
-<p>Scoring</p>
-
-<p>Given two word how clore are they ?<br>
-Is word A closer to B or to C ? Is Match(A,B) worth less or more than Match(C,D) ?<br>
-We try to answer those question in an autcomplete scenario. Error in what is already typed probably worth more than a character not yet typed.
-This would not be the case in a spellchecker setup for example.</p>
-</li>
-<li>
-<p>Highlighting</p>
-
-<p>Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed. Then we compute matching characters between the two tokens, taking special care to output the most compact match when multiple one are possible.</p>
-</li>
-</ol>
+<p>It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with <a href="https://twitter.github.io/typeahead.js/">twitter typeahead</a> and can be used instead of a <a href="https://github.com/twitter/typeahead.js/blob/master/doc/bloodhound.md">bloodhound</a> object. This library is also focused on string processing and do not have any dependency.</p>
 
 <h2>
 <a id="can-i-see-a-demo-" class="anchor" href="#can-i-see-a-demo-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Can I see a demo ?</h2>
 
-<p>You can view the demo page <a href="https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html">here</a> If you are juste getting started, you can see a minimal setup <a href="https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html">here</a> </p>
+<p>You can view the main demo page <a href="https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html">here</a><br>
+ If you want to see a simple minimal setup, it's <a href="https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html">here</a> </p>
 
 <h2>
-<a id="is-this-based-on-edit-distance-" class="anchor" href="#is-this-based-on-edit-distance-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Is this based on edit distance ?</h2>
+<a id="why-a-suggestion-engine-" class="anchor" href="#why-a-suggestion-engine-" aria-hidden="true"><span class="octicon octicon-link"></span></a>Why a suggestion engine ?</h2>
 
-<p>Short answer: No. Medium answer: Sort of. Long answer: there's a whole section below about how we calculate a score.</p>
+<p>Many fuzzy string project are basically a scoring algorithm with a loop to apply it on a list of string. Treating each string as a single word to match. This is perfect for spellchecking scenario, but can be insufficient if we deal with object or sentences/expression rater than words. </p>
 
-<p>All this to say, this provide a different scoring than typical levenshtein distance, it might be better or worse suited to your application. For example in suggest-as-you-type scenario it might be better to show vague suggestion than nothing. For situation where we ask if two things are the same (person, address, etc) it might be better to have more strict positive matches.</p>
+<p>This project add infrastructure to accept about any kind of input and loop the scoring algorithm over each words of specified field of your objects. Including field that are array (for example a list of keywords or a list of authors). Then It'll put together a score that take into account the multiple words or multiple fields that matches. Finally it'll allow you to transform the output to your liking for display. </p>
 
-<h2>
-<a id="what-is-lcs-" class="anchor" href="#what-is-lcs-" aria-hidden="true"><span class="octicon octicon-link"></span></a>What is LCS ?</h2>
-
-<p>Longest common sub-sequence. Shared character between two string in the right order. lcs(survey, surgery) = surey.</p>
-
-<p>Computer science often think similarity between two string in term of error (distance). And computational biology in term of matches. (We can view matching in Proteins, DNA, etc as a string problem).</p>
-
-<p>They are related but different problem and the bet of this project is that LCS could be useful for auto-complete scenario (with some help). As a bonus it's often faster to compute.</p>
-
-<h1>
-<a id="algorythm" class="anchor" href="#algorythm" aria-hidden="true"><span class="octicon octicon-link"></span></a>Algorythm</h1>
-
-<p>The whole library is a very elaborate suport arround the following snippet.
-Let <code>strA</code> be the query, position of each character is recorded for fast search later. Let <code>strB</code> be the entry in the database we are trying to score. Second loop is the important part. One lookup and 4 bit operation per character of <code>strB</code>. That's where speed is.</p>
-
-<div class="highlight highlight-javascript"><pre><span class="pl-k">var</span> m <span class="pl-k">=</span> strA.<span class="pl-c1">length</span>;
-<span class="pl-k">var</span> n <span class="pl-k">=</span> strB.<span class="pl-c1">length</span>;
-<span class="pl-k">var</span> aMap <span class="pl-k">=</span> {};
-
-<span class="pl-c">// - - - - - - - -</span>
-<span class="pl-c">// PRECOMPUTE:</span>
-<span class="pl-c">// - - - - - - - -</span>
-
-<span class="pl-c">//Map position of each character of a (first char is lsb, so rigth to left)</span>
-<span class="pl-c">// --------------"retcarahc"</span>
-<span class="pl-c">// aMap["a"] =  0b000010100</span>
-
-<span class="pl-k">for</span> (i <span class="pl-k">=</span> <span class="pl-c1">0</span>; i <span class="pl-k">&lt;</span> m; i<span class="pl-k">++</span>) {
-    aMap[strA[i]] |<span class="pl-k">=</span> (<span class="pl-c1">1</span> <span class="pl-k">&lt;&lt;</span> i)
-}
-
-<span class="pl-k">var</span> mask <span class="pl-k">=</span> ( <span class="pl-c1">1</span> <span class="pl-k">&lt;&lt;</span> m ) <span class="pl-k">-</span> <span class="pl-c1">1</span>;
-<span class="pl-k">var</span> S <span class="pl-k">=</span> mask, U;
-
-<span class="pl-c">// - - - - - - - -</span>
-<span class="pl-c">// For each item</span>
-<span class="pl-c">// - - - - - - - -</span>
-
-<span class="pl-c">// Fill LCS dynamic programing table</span>
-<span class="pl-c">// bitvetor S record position of increase.</span>
-<span class="pl-c">// Whole line computed in parralel !</span>
-<span class="pl-c">// (Same cost to update 1 bit or 32)</span>
-<span class="pl-c">// See Hyyrö, 2004 with S representing V'</span>
-
-<span class="pl-k">for</span> (j <span class="pl-k">=</span> <span class="pl-c1">0</span>; j <span class="pl-k">&lt;</span> n; j<span class="pl-k">++</span>) {
-    U <span class="pl-k">=</span> S <span class="pl-k">&amp;</span> aMap[strB[j]];
-    S <span class="pl-k">=</span> (S <span class="pl-k">+</span> U) | (S <span class="pl-k">-</span> U);
-}
-
-S <span class="pl-k">=</span> <span class="pl-k">~</span>S <span class="pl-k">&amp;</span> mask;
-<span class="pl-c">//Count the numer of bit set (1) in S.</span>
-<span class="pl-c">//this give you number of matching character (llcs) in strA, strB.</span>
-<span class="pl-c">//We'll see below there's still improvement that can be made to this score.</span></pre></div>
-
-<p>This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
-Plus no elaborate data structure so constant should be low. Count dictionary as elaborate ? Maybe, but whole javascript is built around dictionary, even plain array.</p>
-
-<h2>
-<a id="v2" class="anchor" href="#v2" aria-hidden="true"><span class="octicon octicon-link"></span></a>V2</h2>
-
-<p>Just after we tell you how bit parralelism allow to process a 30 char search at the same cost of a single char,
-we go on and apply the algorithm on english word using of about 5 char, and we use 5 out of 30 available bits.
-V2 use a mofified algorithm that allow to pack multiple words in a single 32bit numbers and keep independent score for each word.
-(For example we can use a single pass to process 6 words of 5 char) instead of 6 different pass. </p>
-
-<p>Theoretical speedup is important.  However it make scoring more complex, so in the above case we have a speedup of about 2x instead of 6x or so.
-There's probably room to improve the code.</p>
+<p>We aim to be a plug-and-play approximate string matching suggestion engine, you provide your favorite search-box/select-box UI library and we provide data crunching for your query to give you quality matches.</p>
 
 <h1>
 <a id="basic-usage" class="anchor" href="#basic-usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic usage</h1>
@@ -152,7 +63,7 @@ There's probably room to improve the code.</p>
 Then use the method search to perform a search</p>
 
 <div class="highlight highlight-javascript"><pre>    <span class="pl-k">var</span> data <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>survey<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>surgery<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>insurgence<span class="pl-pds">"</span></span>];
-    <span class="pl-k">var</span> searcher <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzySearch</span>({source<span class="pl-k">:</span>data, output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>item<span class="pl-pds">"</span></span>});
+    <span class="pl-k">var</span> searcher <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzySearch</span>({source<span class="pl-k">:</span>data});
     <span class="pl-k">var</span> query <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>assurance<span class="pl-pds">"</span></span>;
     <span class="pl-k">var</span> result <span class="pl-k">=</span> searcher.<span class="pl-c1">search</span>(query)</pre></div>
 
@@ -162,32 +73,40 @@ Then use the method search to perform a search</p>
 <p>FuzzySearch support the __ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time</p>
 
 <div class="highlight highlight-javascript"><pre><span class="pl-k">var</span> books <span class="pl-k">=</span> [{<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>First Book<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>John Doe<span class="pl-pds">"</span></span>}, {<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>...<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span><span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>...<span class="pl-pds">"</span></span>}];
-<span class="pl-k">var</span> fuzzyhound <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzySearch</span>({source<span class="pl-k">:</span>data, keys<span class="pl-k">:</span>[<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span>], output_map<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span> });
+<span class="pl-k">var</span> fuzzyhound <span class="pl-k">=</span> <span class="pl-k">new</span> <span class="pl-en">FuzzySearch</span>({source<span class="pl-k">:</span>books, keys<span class="pl-k">:</span>[<span class="pl-s"><span class="pl-pds">"</span>title<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>author<span class="pl-pds">"</span></span>] });
 
-$(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="pl-pds">'</span></span>).typeahead({ minLength<span class="pl-k">:</span> <span class="pl-c1">2</span> }, {
-    name<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">'</span>fuzzyhound<span class="pl-pds">'</span></span>,
-    source<span class="pl-k">:</span> fuzzyhound,
-    display<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>item.title<span class="pl-pds">"</span></span>,
-    templates<span class="pl-k">:</span> {
-        <span class="pl-en">suggestion</span><span class="pl-k">:</span> <span class="pl-k">function</span> (<span class="pl-smi">suggestion</span>) {
-            <span class="pl-k">var</span> item <span class="pl-k">=</span> suggestion.item;
-            <span class="pl-k">var</span> query <span class="pl-k">=</span> suggestion._query;
-            <span class="pl-k">return</span> [
-                <span class="pl-s"><span class="pl-pds">"</span>&lt;div&gt;<span class="pl-pds">"</span></span>,
-                <span class="pl-s"><span class="pl-pds">"</span>&lt;span class='title'&gt;<span class="pl-pds">"</span></span>, fuzzyhound.highlight(query, item.<span class="pl-c1">title</span>), <span class="pl-s"><span class="pl-pds">"</span>&lt;/span&gt;|<span class="pl-pds">"</span></span>,
-                <span class="pl-s"><span class="pl-pds">"</span>&lt;span class='author'&gt;<span class="pl-pds">"</span></span>, fuzzyhound.highlight(query, item.author), <span class="pl-s"><span class="pl-pds">"</span>&lt;/span&gt;&lt;br&gt;<span class="pl-pds">"</span></span>,
-                <span class="pl-s"><span class="pl-pds">"</span>&lt;span class='score'&gt;( <span class="pl-pds">"</span></span>, suggestion.match, <span class="pl-s"><span class="pl-pds">"</span> : <span class="pl-pds">"</span></span>, suggestion.score.toFixed(<span class="pl-c1">2</span>), <span class="pl-s"><span class="pl-pds">"</span> )&lt;/span&gt;<span class="pl-pds">"</span></span>,
-                <span class="pl-s"><span class="pl-pds">"</span>&lt;/div&gt;<span class="pl-pds">"</span></span>
-
-            ].<span class="pl-c1">join</span>(<span class="pl-s"><span class="pl-pds">"</span><span class="pl-pds">"</span></span>);
+$(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="pl-pds">'</span></span>).typeahead({
+            minLength<span class="pl-k">:</span> <span class="pl-c1">2</span>,
+            highlight<span class="pl-k">:</span> <span class="pl-c1">false</span> <span class="pl-c">//let FuzzySearch handle highlight</span>
         },
-        <span class="pl-en">notFound</span><span class="pl-k">:</span> <span class="pl-k">function</span> (<span class="pl-smi">context</span>) {
-            <span class="pl-k">return</span> <span class="pl-s"><span class="pl-pds">"</span>&lt;div class='typeahead-empty'&gt; No result for <span class="pl-cce">\"</span><span class="pl-pds">"</span></span> <span class="pl-k">+</span> context.query <span class="pl-k">+</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>&lt;/div&gt;<span class="pl-pds">"</span></span>
-        }
-    }
+        {
+            name<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">'</span>books<span class="pl-pds">'</span></span>,
+            source<span class="pl-k">:</span> fuzzyhound,
+            templates<span class="pl-k">:</span> {
+                <span class="pl-en">suggestion</span><span class="pl-k">:</span> <span class="pl-k">function</span>(<span class="pl-smi">result</span>){<span class="pl-k">return</span> <span class="pl-s"><span class="pl-pds">"</span>&lt;div&gt;<span class="pl-pds">"</span></span><span class="pl-k">+</span>fuzzyhound.highlight(result.<span class="pl-c1">title</span>)<span class="pl-k">+</span><span class="pl-s"><span class="pl-pds">"</span> by <span class="pl-pds">"</span></span><span class="pl-k">+</span>fuzzyhound.highlight(result.author)<span class="pl-k">+</span><span class="pl-s"><span class="pl-pds">"</span>&lt;/div&gt;<span class="pl-pds">"</span></span>}
+            }
+        });</pre></div>
 
+<h2>
+<a id="how-is-this-library-different-" class="anchor" href="#how-is-this-library-different-" aria-hidden="true"><span class="octicon octicon-link"></span></a>How is this library different ?</h2>
 
-}</pre></div>
+<ul>
+<li><p>Scoring each item as a sentence instead of a single word is probably a good selling point, even if you do not need more advanced input/output capabilities.
+And while the extra loops are not that hard, the algorithm used for the character-by-character "hot loop" support scoring multiple query in parallel, so we are very efficient at solving this task.</p></li>
+<li><p>We use bit-parallelism to have a very compact representation of the problem  and speed-up the search.  The idea is that changing one bit or changing 32 bit in an integer take the same amount of time. This basically mean we can search for a 2 character words or 30 character words with the same amount of computation. However 30 character words are quite rare. So we use a modified algorithm that pack multiple words in the same query. For example we could pack six 5 characters words in the same query in the above mentioned hot loop.</p></li>
+<li><p>Have more than 32 chars ? No problem ! We'll use as many bit-packed query as you need to search for the whole data. Have a single word bigger than 32 char ? A System.Namespace.Library.something.field symbol maybe ? No problem, we got you covered and we'll transparently switch to an non bit-vector based implementation. </p></li>
+<li><p>However, focus on speed is not there to be frugal or beat benchmarks, instead we use it to compute more things and try to be as user-friendly as possible with the computation budget.</p></li>
+<li><p>Scoring is based on a exact problem like <a href="https://en.wikipedia.org/wiki/Levenshtein_distance">Levenshtein edit distance</a>,
+but we focus on similarities instead of distance, using <a href="https://en.wikipedia.org/wiki/Longest_common_subsequence_problem">Longest common subsequence</a>.
+When searching from a list of string with different length, there's quite a bit of difference between <code>the most similar</code> and the <code>least errors</code>. We believe looking at similarities give intuitive results for an autocomplete scenario. (you can see a discussion about scoring below)</p></li>
+</ul>
+
+<h2>
+<a id="a-note-about-speed" class="anchor" href="#a-note-about-speed" aria-hidden="true"><span class="octicon octicon-link"></span></a>A note about speed</h2>
+
+<p>There's a few way to achieve speed in javascript. One common pattern is to cache quantities that don't change out of loop. Another way is to understand that modern browser will optimise javascript, but have to switch to slower version of the code when javascript behave away from statically typed language, this is one reason you'll see jsdoc type annotation in this project.</p>
+
+<p>But the most important contribution to speed is algorithm: we can try to find a fast way to compute something, but we can gain more if we find something else, easier to compute, that is somehow equivalent. However fast case often only cover a specialised case. So for that reason we provide 4 different algorithms that solve similar problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight). There's no configuration, we'll switch transparently to the best algorithm for the task, so whatever you are trying to do there's some fast path for it. </p>
 
 <h1>
 <a id="scoring-overview" class="anchor" href="#scoring-overview" aria-hidden="true"><span class="octicon octicon-link"></span></a>Scoring overview</h1>
@@ -197,7 +116,8 @@ $(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="p
 <h2>
 <a id="scoring-an-item" class="anchor" href="#scoring-an-item" aria-hidden="true"><span class="octicon octicon-link"></span></a>Scoring an item</h2>
 
-<p>FuzzySearch support quite complex items, query is compared to specified field.</p>
+<p>FuzzySearch support quite complex items, query is compared to specified field.
+Suppose we have an array of books, where each book looks like this:</p>
 
 <div class="highlight highlight-javascript"><pre>    book <span class="pl-k">=</span> {
         Title<span class="pl-k">:</span> <span class="pl-s"><span class="pl-pds">"</span>Cliché à Paris, The<span class="pl-pds">"</span></span>,
@@ -211,22 +131,49 @@ $(<span class="pl-s"><span class="pl-pds">'</span>#typeahead-input<span class="p
 <h3>
 <a id="collect-information-and-normalize" class="anchor" href="#collect-information-and-normalize" aria-hidden="true"><span class="octicon octicon-link"></span></a>Collect information (And normalize)</h3>
 
+<p>First step is to tell FuzzySearch what key to index:  </p>
+
+<ul>
+<li>
+<code>keys = "" or [] or undefined</code> This indicate source is a list of string, index item directly<br>
+</li>
+<li>
+<code>keys = "title" or ["title"]</code> This indicate index a single field <code>title</code><br>
+</li>
+<li>
+<code>keys = ["title","author.fullname"]</code> This indicate index multiple fields</li>
+<li>
+<code>keys = {title:"title",author:"author.fullname"}</code> This indicate index multiple fields and setup aliases/tags</li>
+</ul>
+
+<p>for all the above syntax you can optionally add a path prefix <code>item.</code>: all the following are equivalent: <code>title</code>, <code>.title</code> , <code>item.title</code></p>
+
+<h4>
+<a id="example" class="anchor" href="#example" aria-hidden="true"><span class="octicon octicon-link"></span></a>Example</h4>
+
+<p>With the above book object and this set of keys:</p>
+
 <div class="highlight highlight-javascript"><pre>keys <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>Title<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Author<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Year<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Keywords<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>Reference.ISSN<span class="pl-pds">"</span></span>]</pre></div>
 
-<p>First thing we do is to build a list of field value, normalized to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
-We support path (things.this.that).</p>
+<p>First thing we do is to build a list of field values. Then normalize the text to lowercase and with some common accent removed. If field is an array all it's sub elements are inserted. Values are inserted for a key value map.
+We nested path (things.this.that).</p>
 
-<div class="highlight highlight-javascript"><pre>Fields <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">"</span>cliche a paris, the<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>john middlename doe<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>1977<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>story<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>boy<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>00-11-22<span class="pl-pds">"</span></span>]</pre></div>
+<div class="highlight highlight-javascript"><pre>Fields <span class="pl-k">=</span> [ [<span class="pl-s"><span class="pl-pds">"</span>cliche a paris, the<span class="pl-pds">"</span></span>],
+           [<span class="pl-s"><span class="pl-pds">"</span>john middlename doe<span class="pl-pds">"</span></span>],
+           [<span class="pl-s"><span class="pl-pds">"</span>1977<span class="pl-pds">"</span></span>],
+           [<span class="pl-s"><span class="pl-pds">"</span>story<span class="pl-pds">"</span></span>,<span class="pl-s"><span class="pl-pds">"</span>boy<span class="pl-pds">"</span></span>],
+           [<span class="pl-s"><span class="pl-pds">"</span>00-11-22<span class="pl-pds">"</span></span>]
+           ]</pre></div>
 
-<p>Note: you can use the wildcard <code>*</code> to process array of objects or dictionary of objects<br>
-<code>myArray.*.property</code> is equivalent of</p>
+<h4>
+<a id="wildcard" class="anchor" href="#wildcard" aria-hidden="true"><span class="octicon octicon-link"></span></a>wildcard</h4>
 
-<pre><code>myArray.0.property
-myArray.1.property
-myArray.2.property
-  ...
-myArray.N.property
-</code></pre>
+<p>Note: you can use the wildcard <code>*</code> to process array of objects or dictionary of objects <code>myArray.*.property</code> is equivalent of adding</p>
+
+<div class="highlight highlight-javascript"><pre>    myArray.<span class="pl-c1">0</span>.property
+    myArray.<span class="pl-c1">1</span>.property
+      ...
+    myArray.N.property</pre></div>
 
 <h3>
 <a id="field-priority" class="anchor" href="#field-priority" aria-hidden="true"><span class="octicon octicon-link"></span></a>Field priority</h3>
@@ -302,12 +249,13 @@ Match:  <code>How to paint my wall ?</code> against <code>Wall painting 101</cod
 <h3>
 <a id="multiple-field-matching" class="anchor" href="#multiple-field-matching" aria-hidden="true"><span class="octicon octicon-link"></span></a>Multiple field matching</h3>
 
+<p>This query would match in both <code>title</code> and <code>year</code> field:</p>
+
 <blockquote>
 <p>cliche 1977</p>
 </blockquote>
 
-<p>This query would match in both <code>title</code> and <code>year</code> field.
-Flip side of allowing Multiple field matching is giving preference to words in the same field:</p>
+<p>Flip side of allowing Multiple field matching is giving preference to words in the same field:</p>
 
 <blockquote>
 <p>"john doe", two word, same field</p>
@@ -321,7 +269,7 @@ Flip side of allowing Multiple field matching is giving preference to words in t
 </ol>
 
 <h3>
-<a id="output-score-thresholding" class="anchor" href="#output-score-thresholding" aria-hidden="true"><span class="octicon octicon-link"></span></a>Output score thresholding</h3>
+<a id="output-score-threshold" class="anchor" href="#output-score-threshold" aria-hidden="true"><span class="octicon octicon-link"></span></a>Output score threshold</h3>
 
 <p>Default value are for suggestion as you type. In this case we prefer to show poor matches than nothing, match will improve as we type more.</p>
 
@@ -345,26 +293,52 @@ Flip side of allowing Multiple field matching is giving preference to words in t
 <a id="output-map" class="anchor" href="#output-map" aria-hidden="true"><span class="octicon octicon-link"></span></a>Output map</h3>
 
 <h4>
-<a id="full-detail" class="anchor" href="#full-detail" aria-hidden="true"><span class="octicon octicon-link"></span></a>Full detail</h4>
+<a id="get-score-detail-searchresult-object" class="anchor" href="#get-score-detail-searchresult-object" aria-hidden="true"><span class="octicon octicon-link"></span></a>Get Score detail (SearchResult object)</h4>
 
-<p>Setting <code>outputmap=""</code> return the object as we use internally for sorting and scoring</p>
+<p>Setting <code>output_map="root"</code> return the object as we use internally for sorting and scoring</p>
 
-<div class="highlight highlight-javascript"><pre>    candidate <span class="pl-k">=</span> {
+<div class="highlight highlight-javascript"><pre>    result <span class="pl-k">=</span> {
         score<span class="pl-k">:</span><span class="pl-c1">8.1</span>,
         item<span class="pl-k">:</span>{}, <span class="pl-c">//original item</span>
-        match<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>1977<span class="pl-pds">"</span></span>,
         matchIndex<span class="pl-k">:</span><span class="pl-c1">2</span>
+        sortkey<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>...<span class="pl-pds">"</span></span>
     }</pre></div>
 
-<h4>
-<a id="original-detail" class="anchor" href="#original-detail" aria-hidden="true"><span class="octicon octicon-link"></span></a>Original detail</h4>
-
-<p>Setting <code>outputmap="item"</code> give you back original item as given to the algorithm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)</p>
+<p>you can use <code>instance.getMatchingField(result)</code> to recover matching field.</p>
 
 <h4>
-<a id="property-of-an-original-item" class="anchor" href="#property-of-an-original-item" aria-hidden="true"><span class="octicon octicon-link"></span></a>Property of an original item</h4>
+<a id="get-original-object" class="anchor" href="#get-original-object" aria-hidden="true"><span class="octicon octicon-link"></span></a>Get Original object</h4>
 
-<p>If you only need the id or title of the original item you can do it like that <code>outputmap="item.property"</code></p>
+<p>Setting <code>output_map="item"</code> or <code>output_map="root.item"</code> give you back original item as given to the algorithm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)</p>
+
+<h4>
+<a id="get-a-field-from-the-original-object" class="anchor" href="#get-a-field-from-the-original-object" aria-hidden="true"><span class="octicon octicon-link"></span></a>Get a field from the original object</h4>
+
+<p>If you only need the id or title of the original item you can do it like that <code>output_map="item.property"</code> or <code>output_map="root.item.property"</code></p>
+
+<h4>
+<a id="use-custom-output-object-aliases" class="anchor" href="#use-custom-output-object-aliases" aria-hidden="true"><span class="octicon octicon-link"></span></a>Use custom output object (Aliases)</h4>
+
+<p>To acheive taht, you need to set <code>keys</code> option to a dictionary of <code>{output:input}</code> and set <code>output_map="alias"</code>. In that case we'll produce the requested format for you. If output is an array we'll apply <code>options.join_str</code> to join the elements (default to <code>", "</code>)</p>
+
+<p>Example Input: </p>
+
+<div class="highlight highlight-javascript"><pre>    keys <span class="pl-k">=</span> {
+        title<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>item.title<span class="pl-pds">"</span></span>,
+        authors<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>item.authors.*.Fullname<span class="pl-pds">"</span></span>,
+    }</pre></div>
+
+<p>Example output: </p>
+
+<div class="highlight highlight-javascript"><pre>    result <span class="pl-k">=</span> {
+        title<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>Some book<span class="pl-pds">"</span></span>,
+        authors<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>John Doe, Someone Else<span class="pl-pds">"</span></span>,
+        _match<span class="pl-k">:</span><span class="pl-s"><span class="pl-pds">"</span>John Doe<span class="pl-pds">"</span></span>,
+        _score<span class="pl-k">:</span><span class="pl-c1">8</span>,
+        _item<span class="pl-k">:</span> {<span class="pl-c">/*original object*/</span>}
+    }</pre></div>
+
+<p>As you can see we append match detail to the end of custom output. Do not use those name in the key value map or they'll get overwritten.</p>
 
 <h2>
 <a id="scoring-a-token-in-a-auto-complete-friendly-manner" class="anchor" href="#scoring-a-token-in-a-auto-complete-friendly-manner" aria-hidden="true"><span class="octicon octicon-link"></span></a>Scoring a token (in a auto-complete friendly manner)</h2>
@@ -489,9 +463,7 @@ match("uni","universi") : 5 error 8 char, 0,625 error/char
 
 <p>Possibly more interesting, length of LCS is fast to compute. Similar in complexity than simple edit distance. Indeed, if we set <code>m: length of string A</code>, <code>n: length of string B</code>, <code>ed: simple edit distance with unit cost</code>. <code>llcs:length of lcs</code>, we have:</p>
 
-<blockquote>
-<p>2*llcs = m + n - ed</p>
-</blockquote>
+<div class="highlight highlight-javascript"><pre>    <span class="pl-c1">2</span><span class="pl-k">*</span>llcs <span class="pl-k">=</span> m <span class="pl-k">+</span> n <span class="pl-k">-</span> ed</pre></div>
 
 <p>So basically we can learn from that than:</p>
 
@@ -553,8 +525,7 @@ But, we also want to give better score to better match, so we have to find to in
 
 <p>Let's examine a jaro like score: let <code>m: be number of matches</code>, <code>sa: size of a</code>, <code>sb: size of b</code>.</p>
 
-<pre><code>score = (m/sa + m/sb) /2;
-</code></pre>
+<div class="highlight highlight-javascript"><pre>    score <span class="pl-k">=</span> (m/sa <span class="pl-k">+</span> m/sb) /<span class="pl-c1">2</span>;</pre></div>
 
 <p>This has some interesting properties:</p>
 
@@ -691,9 +662,56 @@ But, we also want to give better score to better match, so we have to find to in
 </table>
 
 <h1>
-<a id="algorithms" class="anchor" href="#algorithms" aria-hidden="true"><span class="octicon octicon-link"></span></a>Algorithms</h1>
+<a id="algorythm" class="anchor" href="#algorythm" aria-hidden="true"><span class="octicon octicon-link"></span></a>Algorythm</h1>
 
-<p>Main bitvector algorythm</p>
+<p>The whole library is a very elaborate suport arround the following snippet.
+Let <code>strA</code> be the query, position of each character is recorded for fast search later. Let <code>strB</code> be the entry in the database we are trying to score. Second loop is the important part. One lookup and 4 bit operation per character of <code>strB</code>. That's where speed is.</p>
+
+<div class="highlight highlight-javascript"><pre><span class="pl-k">var</span> m <span class="pl-k">=</span> strA.<span class="pl-c1">length</span>;
+<span class="pl-k">var</span> n <span class="pl-k">=</span> strB.<span class="pl-c1">length</span>;
+<span class="pl-k">var</span> aMap <span class="pl-k">=</span> {};
+
+<span class="pl-c">// - - - - - - - -</span>
+<span class="pl-c">// PRECOMPUTE:</span>
+<span class="pl-c">// - - - - - - - -</span>
+
+<span class="pl-c">//Map position of each character of a (first char is lsb, so rigth to left)</span>
+<span class="pl-c">// --------------"retcarahc"</span>
+<span class="pl-c">// aMap["a"] =  0b000010100</span>
+
+<span class="pl-k">for</span> (i <span class="pl-k">=</span> <span class="pl-c1">0</span>; i <span class="pl-k">&lt;</span> m; i<span class="pl-k">++</span>) {
+    aMap[strA[i]] |<span class="pl-k">=</span> (<span class="pl-c1">1</span> <span class="pl-k">&lt;&lt;</span> i)
+}
+
+<span class="pl-k">var</span> mask <span class="pl-k">=</span> ( <span class="pl-c1">1</span> <span class="pl-k">&lt;&lt;</span> m ) <span class="pl-k">-</span> <span class="pl-c1">1</span>;
+<span class="pl-k">var</span> S <span class="pl-k">=</span> mask, U;
+
+<span class="pl-c">// - - - - - - - -</span>
+<span class="pl-c">// For each item</span>
+<span class="pl-c">// - - - - - - - -</span>
+
+<span class="pl-c">// Fill LCS dynamic programing table</span>
+<span class="pl-c">// bitvetor S record position of increase.</span>
+<span class="pl-c">// Whole line computed in parralel !</span>
+<span class="pl-c">// (Same cost to update 1 bit or 32)</span>
+<span class="pl-c">// See Hyyrö, 2004 with S representing V'</span>
+
+<span class="pl-k">for</span> (j <span class="pl-k">=</span> <span class="pl-c1">0</span>; j <span class="pl-k">&lt;</span> n; j<span class="pl-k">++</span>) {
+    U <span class="pl-k">=</span> S <span class="pl-k">&amp;</span> aMap[strB[j]];
+    S <span class="pl-k">=</span> (S <span class="pl-k">+</span> U) | (S <span class="pl-k">-</span> U);
+}
+
+S <span class="pl-k">=</span> <span class="pl-k">~</span>S <span class="pl-k">&amp;</span> mask;
+<span class="pl-c">//Count the numer of bit set (1) in S.</span>
+<span class="pl-c">//this give you number of matching character (llcs) in strA, strB.</span>
+<span class="pl-c">//We'll see below there's still improvement that can be made to this score.</span></pre></div>
+
+<p>This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).</p>
+
+<h1>
+<a id="references" class="anchor" href="#references" aria-hidden="true"><span class="octicon octicon-link"></span></a>References</h1>
+
+<p>Main bit-parallel algorithm</p>
 
 <blockquote>
 <p>A fast and practical bit-vector algorithm for the longest common sub-sequence problem (Crochemore 2001)
@@ -719,7 +737,7 @@ for Approximate and Multiple String Matching (Hyyrö 2006)
 <a href="http://www.dcc.uchile.cl/%7Egnavarro/ps/jea06.pdf">http://www.dcc.uchile.cl/~gnavarro/ps/jea06.pdf</a></p>
 </blockquote>
 
-<p>Sequence alignment (highligth)</p>
+<p>Sequence alignment (highlight)</p>
 
 <blockquote>
 <p>Smith Waterman Gotoh
@@ -727,7 +745,7 @@ for Approximate and Multiple String Matching (Hyyrö 2006)
 <a href="http://telliott99.blogspot.ca/2009/08/alignment-affine-gap-penalties_08.html">http://telliott99.blogspot.ca/2009/08/alignment-affine-gap-penalties_08.html</a></p>
 </blockquote>
 
-<p>Compaison of some string similarity</p>
+<p>Comparison of some string similarity measurements</p>
 
 <blockquote>
 <p><a href="https://asecuritysite.com/forensics/simstring">https://asecuritysite.com/forensics/simstring</a></p>
