@@ -4,26 +4,7 @@ FuzzySearch.js
 What is FuzzySearch.js ?
 -----------------------
 
-It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with twitter type-ahead and can be used instead of a bloodhound object. This library / suggestion engine do not have nay dependency. It is also focused on string processing and will not do ajax call by itself.
-
-It perform three kind of operation:
-
-1. Searching
-
-    Perform the scoring operation on all item keyword.  
-    Manage logic of why an item would have a better overall score than another given multiple approximately matched keyword
-
-2. Scoring
-
-    Given two word how close are they ?  
-    Is word A closer to B or to C ? Is Match(A,B) worth less or more than Match(C,D) ?  
-    We try to answer those question in an autocomplete scenario. Error in what is already typed probably worth more than a character not yet typed.
-    This would not be the case in a spellchecker setup for example.
-
-
-2. Highlighting
-
-    Highlight is provided on demand. First best 1:1 pairing between query and field tokens is computed. Then we compute matching characters between the two tokens, taking special care to output the most compact match when multiple one are possible.
+It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with [twitter typeahead](https://twitter.github.io/typeahead.js/) and can be used instead of a [bloodhound](https://github.com/twitter/typeahead.js/blob/master/doc/bloodhound.md) object. This library is also focused on string processing and do not have any dependency.
 
 Can I see a demo ?
 ------------------
@@ -34,38 +15,12 @@ Can I see a demo ?
 Why a suggestion engine ?
 ------------------------
 
-Because most fuzzy string project are basically a scoring algorithm with a loop to apply it on a list of string as if each string was a single word.
-This is perfect for auto correct scenario, but can lack if we deal with object or sentences rater than words. 
+Many fuzzy string project are basically a scoring algorithm with a loop to apply it on a list of string. Treating each string as a single word to match. This is perfect for spellchecking scenario, but can be insufficient if we deal with object or sentences/expression rater than words. 
 
-This project add infrastructure to take about any kind of input and loop the scoring algorithm over each words, of specified field, of your objects.
-Then It'll put together a score that take into account multiple words or multiple fields that matches. Finally it'll allow you to transform the output to your liking for display. 
+This project add infrastructure to accept about any kind of input and loop the scoring algorithm over each words of specified field of your objects. Including field that are array (for example a list of keywords or a list of authors). Then It'll put together a score that take into account the multiple words or multiple fields that matches. Finally it'll allow you to transform the output to your liking for display. 
 
-We aim to be a plug and play approximate string matching search engine, that's aware of your data structure. You provide your favorite UI library and we provide quality matches for your query data crunching.
- 
-How is this library different ?
------------------------
+We aim to be a plug-and-play approximate string matching suggestion engine, you provide your favorite search-box/select-box UI library and we provide data crunching for your query to give you quality matches.
 
-- Scoring each item as a sentences of a single word is probably a good selling point, even if you do not need more complicated input/output capabilities.
-  And while the extra loop is not that hard, the algorithm used for the character-by-character "hot loop" support scoring multiple query in parallel, so we are very efficient at solving that task.
-
-- We use bit-parallelism to have a very compact representation of the problem  and speed-up the search. The idea is that changing one bit or changing 32 bit in an integer take the same amount of time. This basically mean we can search for a 2 character words or 30 character words with the same amount of computation. However 30 character words are quite rare. So we use a modified algorithm that pack multiple words in the same query. For example we could pack six 5 characters words in the same query.
-
-- Have more than 32 chars ? No problem ! We'll use as many bit-packed query as you need to search for the whole data. Have a single word bigger than 32 char ? A System.Namespace.Library.something.field symbol maybe ? No problem, we got you covered and we'll transparently switch to an non bit-vector based implementation. 
-
-- Focus on speed is not there to be frugal or beat benchmarks, instead we use it to compute more things and try to be as user-friendly as possible with the computation budget.
-
-- Scoring is based on a exact problem like (Levenshtein edit distance) [https://en.wikipedia.org/wiki/Levenshtein_distance],
-  but we focus on similarities instead of distance, using (Longest common subsequence)[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem].
-  When searching from a list of string with different length, there's quite a bit of difference between `the most similar` and the `least errors`.
-  We believe looking at similarities give intuitive results for an autocomplete scenario. (you can see a discussion about scoring below)
-  
-A note about speed
--------------------
-
-There's a few thing we have tried, one common pattern is to cache loop invariant quantities, another thing we tried to ensure is that frequently used variable are statically typed to avoid deoptimisations. But the most important contribution to speed is algorithm: we can try to find a fast way to compute something, but we can gain more if we find something else easier to compute that is somehow equivalent.
-
-The problem then is that the general case is not always equivalent to the easier problem we are trying to solve. So for that reason we provide 4 different algorithms that solve almost the same problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight) There's no configuration we'll switch transparently to the best algorithm for the task. So whatever you are trying to do there's some fast path for it. 
- 
 
 Basic usage
 =====================
@@ -105,6 +60,31 @@ $('#typeahead-input').typeahead({
         });
 ```
 
+How is this library different ?
+-----------------------
+
+- Scoring each item as a sentence instead of a single word is probably a good selling point, even if you do not need more advanced input/output capabilities.
+  And while the extra loops are not that hard, the algorithm used for the character-by-character "hot loop" support scoring multiple query in parallel, so we are very efficient at solving this task.
+
+- We use bit-parallelism to have a very compact representation of the problem  and speed-up the search.  The idea is that changing one bit or changing 32 bit in an integer take the same amount of time. This basically mean we can search for a 2 character words or 30 character words with the same amount of computation. However 30 character words are quite rare. So we use a modified algorithm that pack multiple words in the same query. For example we could pack six 5 characters words in the same query in the above mentioned hot loop.
+
+- Have more than 32 chars ? No problem ! We'll use as many bit-packed query as you need to search for the whole data. Have a single word bigger than 32 char ? A System.Namespace.Library.something.field symbol maybe ? No problem, we got you covered and we'll transparently switch to an non bit-vector based implementation. 
+
+- However, focus on speed is not there to be frugal or beat benchmarks, instead we use it to compute more things and try to be as user-friendly as possible with the computation budget.
+
+- Scoring is based on a exact problem like [Levenshtein edit distance] (https://en.wikipedia.org/wiki/Levenshtein_distance),
+  but we focus on similarities instead of distance, using [Longest common subsequence](https://en.wikipedia.org/wiki/Longest_common_subsequence_problem).
+  When searching from a list of string with different length, there's quite a bit of difference between `the most similar` and the `least errors`. We believe looking at similarities give intuitive results for an autocomplete scenario. (you can see a discussion about scoring below)
+
+
+A note about speed
+-------------------
+
+There's a few way to achieve speed in javascript. One common pattern is to cache quantities that don't change out of loop. Another way is to understand that modern browser will optimise javascript, but have to switch to slower version of the code when javascript behave away from statically typed language, this is one reason you'll see jsdoc type annotation in this project.
+
+But the most important contribution to speed is algorithm: we can try to find a fast way to compute something, but we can gain more if we find something else, easier to compute, that is somehow equivalent. However fast case often only cover a specialised case. So for that reason we provide 4 different algorithms that solve similar problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight). There's no configuration, we'll switch transparently to the best algorithm for the task, so whatever you are trying to do there's some fast path for it. 
+ 
+
 
 Scoring overview
 =====================
@@ -137,8 +117,7 @@ First step is to tell FuzzySearch what key to index:
 - `keys = ["title","author.fullname"]` This indicate index multiple fields
 - `keys = {title:"title",author:"author.fullname"}` This indicate index multiple fields and setup aliases/tags
 
-for all the above syntax you can optionally add a path prefix `item.`:
-all the following are equivalent: `title`, `.title` , `item.title`
+for all the above syntax you can optionally add a path prefix `item.`: all the following are equivalent: `title`, `.title` , `item.title`
 
 
 #### Example
@@ -163,8 +142,7 @@ Fields = [ ["cliche a paris, the"],
 
 #### wildcard
 
-Note: you can use the wildcard `*` to process array of objects or dictionary of objects  
-`myArray.*.property` is equivalent of adding
+Note: you can use the wildcard `*` to process array of objects or dictionary of objects `myArray.*.property` is equivalent of adding
 
 ```javascript
     myArray.0.property
@@ -238,28 +216,32 @@ Lastly if an item have multiple keyword, we might want to stop searching once we
 
 ### Output map
 
-#### Full detail
+#### Get Score detail (SearchResult object)
 
 Setting `output_map="root"` return the object as we use internally for sorting and scoring
 
 ```javascript
-    candidate = {
+    result = {
         score:8.1,
         item:{}, //original item
         matchIndex:2
+        sortkey:"..."
     }
 ```
 
-you can use .getMatchingField() to recover matching field.
+you can use `instance.getMatchingField(result)` to recover matching field.
 
-#### Original object
+#### Get Original object
 
 Setting `output_map="item"` or `output_map="root.item"` give you back original item as given to the algorithm. This indicate you do not need all match detail and allow to skip some step (like finding original spelling of matching field)
 
-#### Aliases
+#### Get a field from the original object
 
-You can set `keys` to key-value pair of {output:input} and `output_map="alias"`.
-In that case we'll produce the requested format for you. If output is an array we'll apply `options.join_str` to join the elements (default to `", "`)
+If you only need the id or title of the original item you can do it like that `output_map="item.property"` or `output_map="root.item.property"`
+
+#### Use custom output object (Aliases)
+
+To acheive taht, you need to set `keys` option to a dictionary of `{output:input}` and set `output_map="alias"`. In that case we'll produce the requested format for you. If output is an array we'll apply `options.join_str` to join the elements (default to `", "`)
 
 Example Input: 
 ```javascript
@@ -279,11 +261,10 @@ Example output:
         _item: {/*original object*/}
     }
 ```
+As you can see we append match detail to the end of custom output. Do not use those name in the key value map or they'll get overwritten.
 
 
-#### Property of an original item
 
-If you only need the id or title of the original item you can do it like that `output_map="item.property"` or `output_map="root.item.property"`
 
 
 
@@ -354,7 +335,9 @@ This metric is interesting for a number of reason. First we can remember the abo
 
 Possibly more interesting, length of LCS is fast to compute. Similar in complexity than simple edit distance. Indeed, if we set `m: length of string A`, `n: length of string B`, `ed: simple edit distance with unit cost`. `llcs:length of lcs`, we have:
 
-> 2*llcs = m + n - ed
+```javascript
+    2*llcs = m + n - ed
+```
 
 So basically we can learn from that than:
  - If we have either llcs or simple edit distance we can get compute the other.
@@ -398,7 +381,9 @@ The [Jaro–Winkler distance ](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkle
 
 Let's examine a jaro like score: let `m: be number of matches`, `sa: size of a`, `sb: size of b`.
 
+```javascript
     score = (m/sa + m/sb) /2;
+```
 
 This has some interesting properties:
 
