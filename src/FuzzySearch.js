@@ -20,10 +20,9 @@
 
         if (options === undefined) options = {};
         if (!(this instanceof FuzzySearch)) return new FuzzySearch(options);
-        FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, true)
+        FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, _privates, true, this._optionsHook)
 
     }
-
 
     FuzzySearch.defaultOptions =
     /** @lends {FuzzySearch.prototype} */{
@@ -72,7 +71,7 @@
                                          // output_map=function(root){ return something(root.item) }
                                          // ^this get original object and apply something() on it.
 
-        join_str:", ",                   //String used to join array fields
+        join_str: ", ",                   //String used to join array fields
 
         //
         //  Tokens options
@@ -105,14 +104,16 @@
 
         source: [],
         keys: [],
-        tags: [],
-        dirty: false, // set to true to request a new lazy index pass. (index recomputed only on next search)
+        dirty: false // set to true to request a new lazy index pass. (index recomputed only on next search)
+
+    };
+
+    var _privates =
+    /** @lends {FuzzySearch.prototype} */{
+        tags: [],     // alternative name for each key, support ouput alias and per key search
         index: [],    // source is processed using keys, then stored here
 
-        //
-        // Last search
-        //
-
+        //Information on last search
         query: null,
         results: [],
         start_time: 0,
@@ -134,12 +135,13 @@
      * @param {FuzzySearch} self
      * @param {Object} options
      * @param {Object} defaults
+     * @param {Object} privates
      * @param {boolean} reset
+     * @param {function} hook
      *
      */
-    FuzzySearch.setOptions = function (self, options, defaults, reset) {
+    FuzzySearch.setOptions = function (self, options, defaults, privates, reset, hook) {
 
-        //Record original data, if changed rebuild cache.
         var key;
 
         if (reset) {
@@ -150,91 +152,25 @@
                 }
             }
 
+            for (key in privates) {
+                if (privates.hasOwnProperty(key)) self[key] = privates[key]
+            }
+
         } else {
 
             for (key in options) {
                 if (options.hasOwnProperty(key) && defaults.hasOwnProperty(key)) {
-                    if (options[key] === undefined)
-                        self[key] = defaults[key]; //explicitly set a options to undefined => reset default
-                    else
-                        self[key] = options[key]; //overwrite self with options
+                    //explicitly set a options to undefined => reset default, else get value
+                    self[key] = (options[key] === undefined) ? defaults[key] : options[key];
                 }
             }
 
         }
 
-        if ("output_map" in options && typeof options.output_map === "string"){
-            if(self.output_map==="alias") self.output_map = self.aliasResult;
-            else self.output_map = removePrefix(self.output_map, ["root", "."]);
-        }
+        hook.call(self, options)
 
-        //
-        // Input stage, work to allow different syntax for keys definition is done here.
-        //
-
-        var okeys;
-        if ("keys" in options && ( okeys = options.keys) !== undefined) {
-
-            var key_type = Object.prototype.toString.call(okeys);
-            var key_len = okeys.length;
-
-            self.tags = null;
-
-            if (key_type === "[object String]") {
-                self.keys = key_len ? [okeys] : [];
-            }
-
-            else if (key_type === "[object Object]") {
-
-                self.keys = new Array(key_len);
-                self.tags = new Array(key_len);
-                var keyi = 0;
-
-                for (var tag in okeys) {
-                    if (okeys.hasOwnProperty(tag)) {
-                        self.tags[keyi] = tag;
-                        self.keys[keyi] = okeys[tag];
-                        keyi++;
-                    }
-                }
-
-            }
-
-            self.keys = FuzzySearch.map(self.keys, function (k) {
-                return removePrefix(k, ["item", "."])
-            });
-
-            if(!self.tags) self.tags = self.keys;
-
-        }
-
-
-        if (("source" in options) || ("keys" in options)) {
-
-            self._prepSource( self.source, self.keys, true);
-            self.dirty = false;
-
-        }
 
     };
-
-    /**
-     *
-     * @param {string} str - input
-     * @param {Array<string>} prefixes to remove
-     * @returns {string}
-     */
-    function removePrefix(str, prefixes) {
-        var n = prefixes.length;
-        var offset = 0;
-
-        for (i = -1; ++i < n;) {
-            var p = prefixes[i], l = p.length;
-            if (str.substr(offset, l) === p) offset += l;
-        }
-
-        return (offset > 0) ? str.substr(offset) : str;
-    }
 
 
     //
@@ -250,6 +186,7 @@
      * @param {Object} fused_map
      * @constructor
      */
+
     function Query(normalized, tokens_groups, fused_str, fused_map) {
         this.normalized = normalized;
         this.tokens_groups = tokens_groups;
@@ -292,7 +229,7 @@
      * @constructor
      * @extends Indexed
      */
-    function SearchResult(item, fields, item_score, matched_field_index,matched_field_sub, sortkey) {
+    function SearchResult(item, fields, item_score, matched_field_index, matched_field_sub, sortkey) {
         this.item = item;
         this.fields = fields;
         this.score = item_score;
@@ -344,8 +281,73 @@
          */
         setOptions: function (options, reset) {
             if (options === undefined) options = {};
-            if (reset === undefined) reset = false;
-            FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, reset);
+            if (reset === undefined) reset = options.reset || false;
+            FuzzySearch.setOptions(this, options, FuzzySearch.defaultOptions, _privates, reset, this._optionsHook);
+        },
+
+        /**
+         *
+         * @param {*} options
+         * @private
+         */
+        _optionsHook: function (options) {
+
+            //Output stage
+            if ("output_map" in options && typeof options.output_map === "string") {
+                if (this.output_map === "alias") this.output_map = this.aliasResult;
+                else this.output_map = removePrefix(this.output_map, ["root", "."]);
+            }
+
+
+            // Input stage, work to allow different syntax for keys definition is done here.
+
+            var okeys;
+            if ("keys" in options && ( okeys = options.keys) !== undefined) {
+
+                var key_type = Object.prototype.toString.call(okeys);
+                var key_len = okeys.length;
+
+                this.tags = null;
+
+                if (key_type === "[object String]") {
+                    this.keys = key_len ? [okeys] : [];
+                }
+
+                else if (key_type === "[object Object]") {
+
+                    this.keys = new Array(key_len);
+                    this.tags = new Array(key_len);
+                    var keyi = 0;
+
+                    for (var tag in okeys) {
+                        if (okeys.hasOwnProperty(tag)) {
+                            this.tags[keyi] = tag;
+                            this.keys[keyi] = okeys[tag];
+                            keyi++;
+                        }
+                    }
+
+                }
+
+                this.keys = FuzzySearch.map(this.keys, function (k) {
+                    return removePrefix(k, ["item", "."])
+                });
+
+                if (!this.tags) this.tags = this.keys;
+
+            }
+
+            //
+            // Build cache
+            //
+
+            if (("source" in options) || ("keys" in options)) {
+
+                this._prepSource(this.source, this.keys, true);
+                this.dirty = false;
+
+            }
+
         },
 
         /**
@@ -462,7 +464,7 @@
                         else
                             node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, this);
 
-                        if (node_score > field_score){
+                        if (node_score > field_score) {
                             field_score = node_score;
                             field_node = node_index;
                         }
@@ -679,7 +681,7 @@
          *
          */
 
-        _prepSource : function ( source, keys, overwrite) {
+        _prepSource: function (source, keys, overwrite) {
 
             var nb_items = source.length, out_index;
 
@@ -833,18 +835,18 @@
 
         /**
          * Given a SearchResult object, generate a new object that follow alias structure
-         *
+         * @type function
          * @param {SearchResult} result
          * @return {*} aliased result
          */
 
-        aliasResult:function(result){
+        aliasResult: function (result) {
 
-            var f = FuzzySearch.generateFields(result.item, this.keys );
+            var f = FuzzySearch.generateFields(result.item, this.keys);
             var out = {};
 
-            for(var i=-1, n= f.length; ++i<n;){
-                out[this.tags[i]] = f[i].join( this.join_str )
+            for (var i = -1, n = f.length; ++i < n;) {
+                out[this.tags[i]] = f[i].join(this.join_str)
             }
 
             out._item = result.item;
@@ -857,6 +859,32 @@
 
     };
 
+
+    /**
+     * Removes optional prefix of paths.
+     * for example "root.", "."
+     *
+     * @param {string} str - input
+     * @param {Array<string>} prefixes to remove
+     * @returns {string}
+     */
+
+    function removePrefix(str, prefixes) {
+        var n = prefixes.length;
+        var offset = 0;
+
+        for (i = -1; ++i < n;) {
+            var p = prefixes[i], l = p.length;
+            if (str.substr(offset, l) === p) offset += l;
+        }
+
+        return (offset > 0) ? str.substr(offset) : str;
+    }
+
+
+    // - - - - - - - - - - - - - - - - - - - - - -
+    //   Input stage prepare field for search
+    //- - - - - - - - - - - - - - - - - - - - - -
 
     // replace most common accents in french-spanish by their base letter
     //"ãàáäâæẽèéëêìíïîõòóöôœùúüûñç"
@@ -894,7 +922,7 @@
 
     FuzzySearch.generateFields = function (obj, fieldlist) {
 
-        if (!fieldlist.length ) return [[obj.toString()]];
+        if (!fieldlist.length) return [[obj.toString()]];
 
         var n = fieldlist.length;
         var indexed_fields = new Array(n);
@@ -936,44 +964,34 @@
         var isArray = ( type === '[object Array]'  );
         var isObject = ( type === '[object Object]' );
 
-
         if (level === nb_level) {
 
-            if (isArray) {
-                olen = obj.length;
-                for (i = -1; ++i < olen;) {
-                    list.push(obj[i].toString())
-                }
-            }
+            if (isArray)
+                for (i = -1, olen = obj.length; ++i < olen;) list.push(obj[i].toString());
 
             else if (isObject) {
                 for (key in obj) {
-                    if (obj.hasOwnProperty(key)) {
-                        list.push(obj[key].toString())
-                    }
+                    if (obj.hasOwnProperty(key)) list.push(obj[key].toString());
                 }
             }
 
             else list.push(obj.toString());
 
+
         }
 
         else if (key === "*") {
 
-            if (isArray) {
-                olen = obj.length;
-                for (i = -1; ++i < olen;) {
+            if (isArray)
+                for (i = -1, olen = obj.length; ++i < olen;) {
                     _collectValues(obj[i], parts, list, level);
                 }
-            }
-            else if (isObject) {
-                for (key in obj) {
-                    if (obj.hasOwnProperty(key)) {
-                        _collectValues(obj[key], parts, list, level);
-                    }
-                }
-            }
 
+            else if (isObject)
+                for (key in obj) {
+                    if (obj.hasOwnProperty(key))
+                        _collectValues(obj[key], parts, list, level);
+                }
         }
 
         return list;
@@ -997,19 +1015,18 @@
         while (++i < n) {
             str = array[i];
             slen = str.length;
-            if (slen >= minSize) {
-                if (slen < maxSize)
-                    out[++j] = str;
-                else
-                    out[++j] = str.substr(0, maxSize)
-            }
+            if (slen >= minSize) out[++j] = (slen < maxSize) ? str : str.substr(0, maxSize)
         }
         return out;
     };
 
 
+    // - - - - - - - - - - - - - - - - - - - - - -
+    //   Output stage, prepare results for return
+    //- - - - - - - - - - - - - - - - - - - - - -
+
     /**
-     * Like Array.prototype.map()
+     * Own version of Array.prototype.map()
      *
      * @param {Array} source
      * @param {function} transform callback
@@ -1086,14 +1103,22 @@
 
     };
 
-    FuzzySearch.filterGTE = function (array, field, compareto) {
+    /**
+     * Filter array for item where item[field] >= atleast
+     *
+     * @param array
+     * @param field
+     * @param atleast
+     * @returns {Array}
+     */
+    FuzzySearch.filterGTE = function (array, field, atleast) {
         var i = -1, j = -1;
         var n = array.length;
         var out = [], obj;
 
         while (++i < n) {
             obj = array[i];
-            if (obj[field] >= compareto) {
+            if (obj[field] >= atleast) {
                 out[++j] = obj;
             }
         }
@@ -1102,185 +1127,9 @@
     };
 
 
-    //-----------------------------
-    //       SCORING FUNCTIONS
-    // ---------------------------
-
-
-    // Adapted from paper:
-    // A fast and practical bit-vector algorithm for
-    // the Longest Common Subsequence problem
-    // Maxime Crochemore et Al.
-    //
-    // With modification from
-    // Bit-parallel LCS-length computation revisited (H Hyyrö, 2004)
-    // http://www.sis.uta.fi/~hh56766/pubs/awoca04.pdf
-    //
-
-    /**
-     * Score of "search a in b" using self as options.
-     * @param  {string} a
-     * @param {string} b
-     */
-    FuzzySearch.prototype.score = function (a, b) {
-        var aMap = FuzzySearch.alphabet(a);
-        return FuzzySearch.score_map(a, b, aMap, this);
-    };
-
-    /**
-     * Score of "search a in b" using precomputed alphabet map
-     * Main algorithm for single query token to score
-     *
-     * @param {string} a
-     * @param {string} b
-     * @param {Object} aMap - See FuzzySearch.alphabet
-     * @param {FuzzySearch} options
-     */
-    FuzzySearch.score_map = function (a, b, aMap, options) {
-
-        var j, lcs_len;
-        var m = a.length;
-        var n = b.length;
-        var bonus_prefix = options.bonus_match_start;
-
-        var k = m < n ? m : n;
-        if (k === 0 || n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
-
-        //normalize score against length of both inputs
-        var sz_score = (m + n) / ( 2.0 * m * n);
-
-        //common prefix is part of lcs
-        var prefix = 0;
-        if (a === b) prefix = k; //speedup equality
-        else {
-            while ((a[prefix] === b[prefix]) && (++prefix < k)) {
-            }
-        }
-
-        //shortest string consumed
-        if (prefix === k) {
-            lcs_len = prefix;
-            return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
-        }
-
-        //alternative algorithm for large string
-        //need to keep this condition in sync with bitvector
-        if (m > INT_SIZE) {
-            lcs_len = FuzzySearch.llcs_large(a, b, aMap, prefix);
-            return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
-        }
-
-        var mask = ( 1 << m ) - 1;
-        var S = mask, U, c;
-
-        j = prefix - 1;
-        while (++j < n) {
-            c = b[j];
-            if (c in aMap) {
-                // Hyyrö, 2004 S=V'=~V
-                U = S & aMap[c];
-                S = (S + U) | (S - U);
-            }
-        }
-
-        // Remove match already accounted in prefix region.
-        mask &= ~( ( 1 << prefix ) - 1 );
-
-        // lcs_len is number of 0 in S (at position lower than m)
-        // inverse S, mask it, then do "popcount" operation on 32bit
-        S = ~S & mask;
-
-        S = S - ((S >> 1) & 0x55555555);
-        S = (S & 0x33333333) + ((S >> 2) & 0x33333333);
-        lcs_len = (((S + (S >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
-
-        lcs_len += prefix;
-        return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
-
-    };
-
-    /**
-     * Score multiple query token against a single field token.
-     * Apply above score function in parallel
-     * Computation is done as if everything was one big token,
-     * but ZM bit-vector modify boundary so score are independant
-     *
-     * @param {PackInfo} packinfo
-     * @param {string} field_token
-     * @param {FuzzySearch} options
-     * @returns {Array.<number>} scores
-     */
-    FuzzySearch.score_pack = function (packinfo, field_token, options) {
-
-        var packed_tokens = packinfo.tokens;
-        var nb_packed = packed_tokens.length;
-
-        var S = 0xFFFFFFFF, U, c;
-        var ZM = packinfo.gate | 0;
-        var aMap = packinfo.map;
-
-        var n = field_token.length, j = -1;
-
-        while (++j < n) {
-            c = field_token[j];
-            if (c in aMap) {
-                U = S & aMap[c];
-                S = ( (S & ZM) + (U & ZM) ) | (S - U);
-            }
-        }
-
-        S = ~S;
-
-        var k = -1;
-        var offset = 0;
-        var bonus_prefix = options.bonus_match_start;
-        var min_rs = options.token_min_rel_size;
-        var max_rs = options.token_max_rel_size;
-        var scores = new Array(nb_packed);
-
-        while (++k < nb_packed) {
-
-            var query_tok = packed_tokens[k];
-            var m = query_tok.length;
-            var lcs_len, prefix;
-
-            if (n < min_rs * m || n > max_rs * m) {
-                scores[k] = 0;
-                offset += m;
-                continue;
-            }
-
-            if (query_tok === field_token)
-                prefix = lcs_len = m;
-
-            else {
-                var p = (m < n) ? m : n;
-                prefix = 0;
-                while ((query_tok[prefix] === field_token[prefix]) && (++prefix < p)) {
-                }
-                lcs_len = prefix;
-                var Sm = ( (S >>> offset) & ( (1 << m) - 1 ) ) >>> prefix;
-                while (Sm) {
-                    Sm &= Sm - 1;
-                    lcs_len++
-                }
-            }
-
-            offset += m;
-            var sz = (m + n) / ( 2.0 * m * n);
-            scores[k] = sz * lcs_len * lcs_len + bonus_prefix * prefix;
-
-        }
-
-        return scores;
-
-    };
-
     // - - - - - - - - - - - - - - - - -
-    //  SECTION
-    //  Prepare query for search
+    //     Prepare query for search
     // - - - - - - - - - - - - - - - - -
-
 
     /**
      * Given a list of tokens, pack them into group of upto INT_SIZE(32) chars.
@@ -1436,17 +1285,181 @@
 
     };
 
+    //-----------------------------
+    //       SCORING FUNCTIONS
+    // ---------------------------
+
+
     /**
-     * A block with start and end position
-     * Used to record consecutive increase position in llcs_large
-     * @param start
-     * @param end
-     * @constructor
+     * Score of "search a in b" using self as options.
+     * @param  {string} a
+     * @param {string} b
      */
-    function Block(start, end) {
-        this.start = start;
-        this.end = end;
-    }
+    FuzzySearch.prototype.score = function (a, b) {
+        var aMap = FuzzySearch.alphabet(a);
+        return FuzzySearch.score_map(a, b, aMap, this);
+    };
+
+    // Adapted from paper:
+    // A fast and practical bit-vector algorithm for
+    // the Longest Common Subsequence problem
+    // Maxime Crochemore et Al.
+    //
+    // With modification from
+    // Bit-parallel LCS-length computation revisited (H Hyyrö, 2004)
+    // http://www.sis.uta.fi/~hh56766/pubs/awoca04.pdf
+    //
+
+    /**
+     * Score of "search a in b" using precomputed alphabet map
+     * Main algorithm for single query token to score
+     *
+     * @param {string} a
+     * @param {string} b
+     * @param {Object} aMap - See FuzzySearch.alphabet
+     * @param {FuzzySearch} options
+     */
+    FuzzySearch.score_map = function (a, b, aMap, options) {
+
+        var j, lcs_len;
+        var m = a.length;
+        var n = b.length;
+        var bonus_prefix = options.bonus_match_start;
+
+        var k = m < n ? m : n;
+        if (k === 0 || n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
+
+        //normalize score against length of both inputs
+        var sz_score = (m + n) / ( 2.0 * m * n);
+
+        //common prefix is part of lcs
+        var prefix = 0;
+        if (a === b) prefix = k; //speedup equality
+        else {
+            while ((a[prefix] === b[prefix]) && (++prefix < k)) {
+            }
+        }
+
+        //shortest string consumed
+        if (prefix === k) {
+            lcs_len = prefix;
+            return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
+        }
+
+        //alternative algorithm for large string
+        //need to keep this condition in sync with bitvector
+        if (m > INT_SIZE) {
+            lcs_len = FuzzySearch.llcs_large(a, b, aMap, prefix);
+            return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
+        }
+
+        var mask = ( 1 << m ) - 1;
+        var S = mask, U, c;
+
+        j = prefix - 1;
+        while (++j < n) {
+            c = b[j];
+            if (c in aMap) {
+                // Hyyrö, 2004 S=V'=~V
+                U = S & aMap[c];
+                S = (S + U) | (S - U);
+            }
+        }
+
+        // Remove match already accounted in prefix region.
+        mask &= ~( ( 1 << prefix ) - 1 );
+
+        // lcs_len is number of 0 in S (at position lower than m)
+        // inverse S, mask it, then do "popcount" operation on 32bit
+        S = ~S & mask;
+
+        S = S - ((S >> 1) & 0x55555555);
+        S = (S & 0x33333333) + ((S >> 2) & 0x33333333);
+        lcs_len = (((S + (S >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+
+        lcs_len += prefix;
+        return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
+
+    };
+
+    /**
+     * Score multiple query token against a single field token.
+     * Apply above score function in parallel
+     * Computation is done as if everything was one big token,
+     * but ZM bit-vector modify boundary so score are independant
+     *
+     * @param {PackInfo} packinfo
+     * @param {string} field_token
+     * @param {FuzzySearch} options
+     * @returns {Array.<number>} scores
+     */
+    FuzzySearch.score_pack = function (packinfo, field_token, options) {
+
+        var packed_tokens = packinfo.tokens;
+        var nb_packed = packed_tokens.length;
+
+        var S = 0xFFFFFFFF, U, c;
+        var ZM = packinfo.gate | 0;
+        var aMap = packinfo.map;
+
+        var n = field_token.length, j = -1;
+
+        while (++j < n) {
+            c = field_token[j];
+            if (c in aMap) {
+                U = S & aMap[c];
+                S = ( (S & ZM) + (U & ZM) ) | (S - U);
+            }
+        }
+
+        S = ~S;
+
+        var k = -1;
+        var offset = 0;
+        var bonus_prefix = options.bonus_match_start;
+        var min_rs = options.token_min_rel_size;
+        var max_rs = options.token_max_rel_size;
+        var scores = new Array(nb_packed);
+
+        while (++k < nb_packed) {
+
+            var query_tok = packed_tokens[k];
+            var m = query_tok.length;
+            var lcs_len, prefix;
+
+            if (n < min_rs * m || n > max_rs * m) {
+                scores[k] = 0;
+                offset += m;
+                continue;
+            }
+
+            if (query_tok === field_token)
+                prefix = lcs_len = m;
+
+            else {
+                var p = (m < n) ? m : n;
+                prefix = 0;
+                while ((query_tok[prefix] === field_token[prefix]) && (++prefix < p)) {
+                }
+                lcs_len = prefix;
+                var Sm = ( (S >>> offset) & ( (1 << m) - 1 ) ) >>> prefix;
+                while (Sm) {
+                    Sm &= Sm - 1;
+                    lcs_len++
+                }
+            }
+
+            offset += m;
+            var sz = (m + n) / ( 2.0 * m * n);
+            scores[k] = sz * lcs_len * lcs_len + bonus_prefix * prefix;
+
+        }
+
+        return scores;
+
+    };
+
+
 
     //
     // Compute LLCS, using vector of position.
@@ -1607,6 +1620,18 @@
         return lcs_len;
 
     };
+
+    /**
+     * A block with start and end position
+     * Used to record consecutive increase position in llcs_large
+     * @param start
+     * @param end
+     * @constructor
+     */
+    function Block(start, end) {
+        this.start = start;
+        this.end = end;
+    }
 
 
     //
