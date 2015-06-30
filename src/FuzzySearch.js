@@ -60,6 +60,7 @@
 
         sorter: compareResults,          // Function used to sort. See signature of Array.sort(sorter)
         normalize: normalize,            // Function used to transform string (lowercase, accents, etc)
+        filter:null,                     // Select elements to be searched. (done before each search)
 
         /**@type {string|function}*/
         output_map: "item",              // Transform the output, can be a function or a path string.
@@ -168,7 +169,6 @@
         }
 
         hook.call(self, options)
-
 
     };
 
@@ -371,6 +371,10 @@
             var source = this.index;
             var results = [];
 
+            if(this.filter){
+                source = this.filter.call(this,source);
+            }
+
             // ---- MAIN SEARCH LOOP ---- //
             var thresh_include = this._searchIndex(query, source, results);
 
@@ -563,9 +567,6 @@
                 var group_tokens = group_info.tokens;
                 var nb_scores = group_tokens.length;
                 var single = (nb_scores == 1);
-
-                //var best_match_this_field = group_info.reset.slice();
-                //var best_match_index = group_info.reset.slice();
 
                 var best_of_field = group_info.score_field;
                 for (i = -1; ++i < nb_scores;) best_of_field[i] = 0
@@ -814,7 +815,7 @@
             var debounced = this.getInteractive();
             var noop = function (a) {
             };
-            return function (request, response) {
+            return function (/**@type{{term:string}}**/request, response) {
                 debounced(request.term, response, noop, response);
             }
 
@@ -1402,9 +1403,7 @@
         var ZM = packinfo.gate | 0;
         var aMap = packinfo.map;
 
-        var n = field_token.length, j = -1;
-
-        while (++j < n) {
+        for (var j = -1, n = field_token.length;++j < n;) {
             c = field_token[j];
             if (c in aMap) {
                 U = S & aMap[c];
@@ -1414,14 +1413,13 @@
 
         S = ~S;
 
-        var k = -1;
-        var offset = 0;
         var bonus_prefix = options.bonus_match_start;
         var min_rs = options.token_min_rel_size;
         var max_rs = options.token_max_rel_size;
         var scores = new Array(nb_packed);
+        var offset = 0;
 
-        while (++k < nb_packed) {
+        for (var k = -1;++k < nb_packed;) {
 
             var query_tok = packed_tokens[k];
             var m = query_tok.length;
