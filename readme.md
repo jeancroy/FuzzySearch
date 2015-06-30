@@ -4,7 +4,7 @@ FuzzySearch.js
 What is FuzzySearch.js ?
 -----------------------
 
-It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. The suggestion engine is compatible with [twitter typeahead](https://twitter.github.io/typeahead.js/) and can be used instead of a [bloodhound](https://github.com/twitter/typeahead.js/blob/master/doc/bloodhound.md) object. This library is also focused on string processing and do not have any dependency.
+It is an approximate string matching library with focus on search and especially suggest-as-you-type auto-complete. It support complex input as well as simple list of string and allow you to match item as sentences rather than single words. In addition to searching, we provide on demand Sublime Text like highlight (including free word order on highlight).  The suggestion engine is made to be compatible with multiple UI including [twitter typeahead](https://twitter.github.io/typeahead.js/) and can be used instead of a [bloodhound](https://github.com/twitter/typeahead.js/blob/master/doc/bloodhound.md) object. This library is focused on string processing and do not have any dependency.
 
 Can I see a demo ?
 ------------------
@@ -15,11 +15,11 @@ Can I see a demo ?
 Why a suggestion engine ?
 ------------------------
 
-Many fuzzy string project are basically a scoring algorithm with a loop to apply it on a list of string. Treating each string as a single word to match. This is perfect for spellchecking scenario, but can be insufficient if we deal with object or sentences/expression rater than words. 
+Many fuzzy string project are basically a scoring algorithm with a loop to apply it on a list of string. Treating each string as a single word to match. This is perfect for spell checking scenario, but can be insufficient if we deal with object or sentences/expression rater than words. 
 
 This project add infrastructure to accept about any kind of input and loop the scoring algorithm over each words of specified field of your objects. Including field that are array (for example a list of keywords or a list of authors). Then It'll put together a score that take into account the multiple words or multiple fields that matches. Finally it'll allow you to transform the output to your liking for display. 
 
-We aim to be a plug-and-play approximate string matching suggestion engine, you provide your favorite search-box/select-box UI library and we provide data crunching for your query to give you quality matches.
+We aim to be a plug-and-play approximate string matching suggestion engine, you provide your favourite search-box/select-box UI library and we provide data crunching for your query to give you quality matches.
 
 
 Basic usage
@@ -41,7 +41,7 @@ Then use the method search to perform a search
 Twitter typeahead
 ----------------
 
-FuzzySearch support the \__ttAdapter interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time
+FuzzySearch support the `__ttAdapter` interface so it can be used instead of a BloodHound object. Setting no output filter output an abject with all match detail (score, matched field, original item) highlight is provided on demand, here we use it at template construction time
 
 ```javascript
 var books = [{"title":"First Book", "author":"John Doe"}, {"title":"...", "author":"..."}];
@@ -68,7 +68,7 @@ How is this library different ?
 
 - We use bit-parallelism to have a very compact representation of the problem  and speed-up the search.  The idea is that changing one bit or changing 32 bit in an integer take the same amount of time. This basically mean we can search for a 2 character words or 30 character words with the same amount of computation. However 30 character words are quite rare. So we use a modified algorithm that pack multiple words in the same query. For example we could pack six 5 characters words in the same query in the above mentioned hot loop.
 
-- Have more than 32 chars ? No problem ! We'll use as many bit-packed query as you need to search for the whole data. Have a single word bigger than 32 char ? A System.Namespace.Library.something.field symbol maybe ? No problem, we got you covered and we'll transparently switch to an non bit-vector based implementation. 
+- Have more than 32 chars ? No problem ! We'll use as many bit-packed query as you need to search for the whole data. Have a single word bigger than 32 char ? A `System.Namespace.Library.something.field` symbol maybe ? No problem, we got you covered and we'll transparently switch to an non bit-vector based implementation. 
 
 - However, focus on speed is not there to be frugal or beat benchmarks, instead we use it to compute more things and try to be as user-friendly as possible with the computation budget.
 
@@ -80,9 +80,9 @@ How is this library different ?
 A note about speed
 -------------------
 
-There's a few way to achieve speed in javascript. One common pattern is to cache quantities that don't change out of loop. Another way is to understand that modern browser will optimise javascript, but have to switch to slower version of the code when javascript behave away from statically typed language, this is one reason you'll see jsdoc type annotation in this project.
+There's a few way to achieve speed in javascript. One common pattern is to cache quantities that don't change out of loop. Another way is to understand that modern browser will optimize javascript, but have to switch to slower version of the code when javascript behave away from statically typed language, this is one reason you'll see jsdoc type annotation in this project.
 
-But the most important contribution to speed is algorithm: we can try to find a fast way to compute something, but we can gain more if we find something else, easier to compute, that is somehow equivalent. However fast case often only cover a specialised case. So for that reason we provide 4 different algorithms that solve similar problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight). There's no configuration, we'll switch transparently to the best algorithm for the task, so whatever you are trying to do there's some fast path for it. 
+But the most important contribution to speed is algorithm: we can try to find a fast way to compute something, but we can gain more if we find something else, easier to compute, that is somehow equivalent. However fast case often only cover a specialized case. So for that reason we provide 4 different algorithms that solve similar problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight). There's no configuration, we'll switch transparently to the best algorithm for the task, so whatever you are trying to do there's some fast path for it. 
  
 
 
@@ -140,9 +140,9 @@ Fields = [ ["cliche a paris, the"],
            ]
 ```
 
-#### wildcard
+#### Wildcard
 
-Note: you can use the wildcard `*` to process array of objects or dictionary of objects `myArray.*.property` is equivalent of adding
+Note: you can use the Wildcard `*` to process array of objects or dictionary of objects `myArray.*.property` is equivalent of adding
 
 ```javascript
     myArray.0.property
@@ -241,7 +241,7 @@ If you only need the id or title of the original item you can do it like that `o
 
 #### Use custom output object (Aliases)
 
-To acheive taht, you need to set `keys` option to a dictionary of `{output:input}` and set `output_map="alias"`. In that case we'll produce the requested format for you. If output is an array we'll apply `options.join_str` to join the elements (default to `", "`)
+To achieve that, you need to set `keys` option to a dictionary of `{output:input}` and set `output_map="alias"`. In that case we'll produce the requested format for you. If output is an array we'll apply `options.join_str` to join the elements (default to `", "`)
 
 Example Input: 
 ```javascript
@@ -379,7 +379,7 @@ From that we learn that we want to include both length, but not in the form of a
 
 The [Jaro–Winkler distance ](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance) is an heuristic algorithm for string matching. It's fast and perform well in different comparison.  In particular the *Jaro* distance use an approximation of LCS and then report it back to a score ranging from 0-1, combining length of both string. *Wrinkler* add the idea to give a bonus for common prefix, prefix bonus looks like something that fit well in a auto-complete scenario.
 
-Let's examine a jaro like score: let `m: be number of matches`, `sa: size of a`, `sb: size of b`.
+Let's examine a Jaro like score: let `m: be number of matches`, `sa: size of a`, `sb: size of b`.
 
 ```javascript
     score = (m/sa + m/sb) /2;
@@ -423,6 +423,7 @@ Having m squared give the advantage of even better score for good matches and wo
 Configuration
 ==============
 
+(Please see top of JS file for exact options list)
 
 | Parameter                | Default | Description |
 |:--------------------------|---------|-------------|
@@ -434,10 +435,6 @@ Configuration
 | bonus_token_order        | 2.0     | Value of two token properly ordered |
 | bonus_position_decay     | 0.7     | Exponential decay for position bonus (smaller: more importance to first item) |
 | score_round              | 0.1     | Two item that have the same rounded score are sorted alphabetically |
-| output_match_detail      | true    | if false output original item if true output {score:...item:...match:... matchIndex:...} |
-| cache_fields             | true    | Perform the "collect" step only once and store result. Save computation time but use duplicate indexed fields  |
-| max_search_tokens        | 10      | Because of free word order each search token add cost equivalent to one traversal additional tokens are lumped as a nth+1 token|
-| max_candidates           | 100     | Stop search after that many good candidate found Will trigger a recount to enforce relative_to_best rule|
 | highlight_prefix         | false   | true: force prefix as part of highlight (false: minimum gap slower)|
 | highlight_bridge_gap     | 2       | display small gap as substitution set to size of gap 0 to disable|
 | highlight_tk_max_size    | 64      | max size of a token for highlight algorithm (it is BVMAXSIZE(31) for search)|
@@ -445,10 +442,35 @@ Configuration
 | highlight_after          |  ...    | after the highlight <br> `default: </strong>`   |
 
 
-Algorythm
+Algorithms
 =========
-The whole library is a very elaborate suport arround the following snippet.
-Let `strA` be the query, position of each character is recorded for fast search later. Let `strB` be the entry in the database we are trying to score. Second loop is the important part. One lookup and 4 bit operation per character of `strB`. That's where speed is.
+
+Dynamic programming
+------------------
+A very efficient way to solve the longest common substring problem is dynamic programming. We don't use that algorithm for scoring per se, but algorithms we use are clever ways to fill that same table using less efforts, so it's important to understand. (Note that the highlight algorithm is a dynamic programming table that solve a generalization of this problem, where we not only score match but penalize gap.)
+
+|     |s|u|r|g|e|r|y|
+|-----|-|-|-|-|-|-|-|
+|**g**|0|0|0|1|1|1|1|
+|**s**|1|1|1|1|1|1|1|
+|**u**|1|2|2|2|2|2|2|
+|**r**|1|2|3|3|3|3|3|
+|**v**|1|2|3|3|3|3|3|
+|**e**|1|2|3|3|4|4|4|
+|**y**|1|2|3|3|4|4|5|
+
+//todo:explain
+
+
+Bit-Parallelism (Hyyrö 2004)
+---------------
+
+One clever observation about above problem is that two consecutive cell can only change by up to 1 point. So basically we can store above table row by row table as increase/no-increase for each column. Because there's only two state we can use a single bit per column.
+
+That's efficient storage, but what's great is that this storage trick allow to benefit from hardware that is able to operate on 32 or 64 bit at a time. (Javascript can only use 32 bit integer)
+
+This is an example algorithm.
+Let `strA` be the query, position of each character is recorded for fast search later. Let `strB` be the entry in the database we are trying to score.
 
 
 ```javascript
@@ -475,9 +497,9 @@ var S = mask, U;
 // For each item
 // - - - - - - - -
 
-// Fill LCS dynamic programing table
+// Fill LCS dynamic programming table
 // bitvetor S record position of increase.
-// Whole line computed in parralel !
+// Whole line computed in parallel !
 // (Same cost to update 1 bit or 32)
 // See Hyyrö, 2004 with S representing V'
 
@@ -487,12 +509,99 @@ for (j = 0; j < n; j++) {
 }
 
 S = ~S & mask;
-//Count the numer of bit set (1) in S.
+//Count the number of bit set (1) in S.
 //this give you number of matching character (llcs) in strA, strB.
 //We'll see below there's still improvement that can be made to this score.
 ```
 
 This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
+
+
+Multiple string in parralel (Hyyrö 2006)
+---------------------------
+
+Processing 32 character at the cost of 1 looks like a huge speed up. Until you realize english words are more like 5 character long. A natural question to ask then is : would it be possible to pack multiple words, as if it where a larger one, and still keep separate score ?
+
+Indeed it is with some modification, hot loop become:
+```javascript
+for (j = 0; j < n; j++) {
+    U = S & aMap[strB[j]];
+    S = (S&ZM + U&ZM) | (S - U);
+}
+
+S = ~S & mask;
+//Count the number of bit set (1) in each region of S.
+```
+
+With ZM a bit-vector that is 1 inside each words and 0 at word boundary (that is the last character of each word in this case). There's 6 operations instead of 4 so we can score n words\* at the cost of 1.5 (\*as long as total length is less than 32)
+
+
+Quote from (Hyyrö 2006) with symbol renamed to fit code. `S[m]` refer to the m th bit of S.
+
+> We first note that subtracting the vector `U =  S & aMap` from  `S` does not create any carry effects. So the only possible source of interference between different bit regions is the addition  `S + U` ,  and this can be fixed by changing the addition into the form `( S & ZM ) + ( U & ZM )`.  To confirm that this modification does not affect the correct behaviour of the algorithm,  we note the following: If  `S[m] = 0` before the addition, then also `U[m] = 0` and the modification has no effect. If  `S [m] = 1` and `U[m] = 1` before the addition, then the first m bits of the result are the same: the modification just removes the (m +1)th carry bit. Finally, if  `S[m] = 1` and `U[m] = 0` before the addition, then the m th bit of the result of the addition is not important: the result is anyway `|` with `( S − U )`, which has its m th bit set in this case
+
+
+Position Based (Hyyrö 2009)
+---------------
+
+Similar idea to the bit-vector algorithm, first we find an efficient way to represent the problem and the saving in space translate to a saving in computation time.
+
+We'll still record position where dynamic programming table increase, but instead of recording it as a bit position, we record it as a number, allowing to go over 32 characters limitation.
+
+More precisely we'll store sequence of consecutive increase instead of each increase one by one. Those sequence naturally arise when there's sequence of consecutive character that match. (This allow to speed up region of high similarity)
+
+ One the block is formed it'll act as a single unit for the rest of computation.  The algorithm also take advantage of region without matches by not registering block at those region.
+
+
+````
+    s u r g e r y
+ g [0,0,0,1,1,1,1] : [3,4] (Add level 1)
+ s [1,1,1,1,1,1,1] : [0,1] (Make level 1 happens sooner)
+ u [1,2,2,2,2,2,2] : [0,2] (Add level 2, append to block of consecutive increase)
+ r [1,2,3,3,3,3,3] : [0,3] (Add level 3, append to block of consecutive increase)
+ v [1,2,3,3,3,3,3] : [0,3] (v not in surgery, copy)
+ e [1,2,3,3,4,4,4] : [0,3],[4,5] (Add level 4, create new block for it)
+ y [1,2,3,3,4,4,5] : [0,3],[4,5],[6,7] (Add level 5, create new block for it)
+
+````
+
+
+````
+  12345678901234567890   Position (for this demo we start at 1)
+  ii------iii---i--i--   Increase point of previous line
+  12222222345555666777   Score previous line [1,3] [9,12] [15,16] [18,19]
+  ---m-m---------m---m   Match of this line
+  12233333345555677778   Score of this line [1,3] [4,5] [10,12] [15,17] [20,21]
+  ii-i-----ii---ii---i   New increase point
+  12345678901234567890   Position
+````
+
+ - There is 2 Basic operations:
+   - Make a level-up happens sooner
+   - Add an extra level up at the end. (this is where llcs increase !)
+
+ - Two consecutive increase point without match between them ?
+    - Copy from last line.
+
+ - An increase point and a match at the same position ?
+   - Copy from last line.
+
+ - The pattern that trigger a change from last line is:
+   -  ** first match between two increase point **
+
+ - Match at position 4 is dominant, it make the value increase form 2 to 3.
+ Match at position 6 is recessive, it also make value from 2 to 3 BUT value for the line was already 3.
+       All thing considered that match point could have been removed
+
+ - When registering a dominant match, we'll either
+   - grow an existing block if the math happens right after one
+   - start a new block.
+
+ - Because match make increase point happens sooner
+ we also need to remove one increase point from following block.
+ if the initial length was 1, the length is now 0 and block is skipped
+ otherwise it is copied to current line.
+
 
 
 References
