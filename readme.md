@@ -1,6 +1,7 @@
 FuzzySearch.js
 =====================
 
+
 What is FuzzySearch.js ?
 -----------------------
 
@@ -201,9 +202,9 @@ Score is average of
 ### Tagged search
 
 By default any query keyword can match against any field, but you can use tagged search syntax to specify which field to match. 
-- `fieldname:` my specific query
-- part that match any field `fieldname:` match specific field
-- match any `fieldname:` match1 `fieldtwo:` match another
+> **fieldname:** my specific query  
+> part that match any field **fieldname:** match specific field  
+> match any **fieldname:** match1 **fieldtwo:** match another  
 
 Anything before `field:` separator perform normal match. Everything after a separator, up to the next one, match only on specified field.
 We recognize reserved field name and will treat `something-else:` as a normal word rather than a separator.
@@ -217,22 +218,6 @@ You can use alias feature to specify how you want to name each field, this examp
 ```javascript
 keys = {title:'title',author:'author.fullName'}
 ```
-
-
-### Output score threshold
-
-Default value are for suggestion as you type. In this case we prefer to show poor matches than nothing, match will improve as we type more.
-
-> Parameter `thresh_include` control the minimum score to show
-
-We also want to limit choices to a good match or a few good matches if those exist. For example if the best score is twice as good as the next best one, it's obviously the candidate to show.
-
-> Parameter `thresh_relative_to_best` control ratio of best match needed to be shown on the list
-
-Lastly if an item have multiple keyword, we might want to stop searching once we have found a good keyword. If a match is this good it'll be shown, no matter the best threshold.
-
-> Parameter `field_good_enough` control the score needed to stop the search on this item. It also control forced inclusion, not matter best
-
 
 
 ### Output map
@@ -284,6 +269,19 @@ Example output:
 ```
 As you can see we append match detail to the end of custom output. Do not use those name in the key value map or they'll get overwritten.
 
+### Output score threshold
+
+Default value are for suggestion as you type. In this case we prefer to show poor matches than nothing, match will improve as we type more.
+
+> Parameter `thresh_include` control the minimum score to show
+
+We also want to limit choices to a good match or a few good matches if those exist. For example if the best score is twice as good as the next best one, it's obviously the candidate to show.
+
+> Parameter `thresh_relative_to_best` control ratio of best match needed to be shown on the list
+
+Lastly if an item have multiple keyword, we might want to stop searching once we have found a good keyword. If a match is this good it'll be shown, no matter the best threshold.
+
+> Parameter `field_good_enough` control the score needed to stop the search on this item. It also control forced inclusion, not matter best
 
 
 
@@ -470,21 +468,21 @@ Dynamic programming
 ------------------
 A very efficient way to solve the longest common substring problem is dynamic programming. We don't use that algorithm for scoring per se, but algorithms we use are clever ways to fill that same table using less efforts, so it's important to understand. (Note that the highlight algorithm is a dynamic programming table that solve a generalization of this problem, where we not only score match but penalize gap.)
 
-|     |s|u|r|g|e|r|y|
-|-----|-|-|-|-|-|-|-|
-|**g**|0|0|0|1|1|1|1|
-|**s**|1|1|1|1|1|1|1|
-|**u**|1|2|2|2|2|2|2|
-|**r**|1|2|3|3|3|3|3|
-|**v**|1|2|3|3|3|3|3|
-|**e**|1|2|3|3|4|4|4|
-|**y**|1|2|3|3|4|4|5|
-
-//todo:explain
+|  /  |s|u|r|g|e|r|y| 
+|:---:|-|-|-|-|-|-|-| 
+|**g**|0|0|0|1|1|1|1| 
+|**s**|1|1|1|1|1|1|1| 
+|**u**|1|2|2|2|2|2|2| 
+|**r**|1|2|3|3|3|3|3| 
+|**v**|1|2|3|3|3|3|3| 
+|**e**|1|2|3|3|4|4|4| 
+|**y**|1|2|3|3|4|4|5|  
 
 
-Bit-Parallelism (Hyyrö 2004)
+
+Bit-Parallelism 
 ---------------
+(See Crochemore 2001, Hyyrö 2004)
 
 One clever observation about above problem is that two consecutive cell can only change by up to 1 point. So basically we can store above table row by row table as increase/no-increase for each column. Because there's only two state we can use a single bit per column.
 
@@ -538,8 +536,9 @@ S = ~S & mask;
 This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
 
 
-Multiple string in parralel (Hyyrö 2006)
+Multiple string in parralel 
 ---------------------------
+(See Hyyrö & Navarro 2006)
 
 Processing 32 character at the cost of 1 looks like a huge speed up. Until you realize english words are more like 5 character long. A natural question to ask then is : would it be possible to pack multiple words, as if it where a larger one, and still keep separate score ?
 
@@ -562,8 +561,9 @@ Quote from (Hyyrö 2006) with symbol renamed to fit code. `S[m]` refer to the m 
 > We first note that subtracting the vector `U =  S & aMap` from  `S` does not create any carry effects. So the only possible source of interference between different bit regions is the addition  `S + U` ,  and this can be fixed by changing the addition into the form `( S & ZM ) + ( U & ZM )`.  To confirm that this modification does not affect the correct behaviour of the algorithm,  we note the following: If  `S[m] = 0` before the addition, then also `U[m] = 0` and the modification has no effect. If  `S [m] = 1` and `U[m] = 1` before the addition, then the first m bits of the result are the same: the modification just removes the (m +1)th carry bit. Finally, if  `S[m] = 1` and `U[m] = 0` before the addition, then the m th bit of the result of the addition is not important: the result is anyway `|` with `( S − U )`, which has its m th bit set in this case
 
 
-Position Based (Hyyrö 2009)
+Position Based 
 ---------------
+(See Hyyrö 2009)
 
 Similar idea to the bit-vector algorithm, first we find an efficient way to represent the problem and the saving in space translate to a saving in computation time.
 
@@ -636,17 +636,17 @@ Main bit-parallel algorithm
 > Bit-parallel LCS-length computation revisited (Hyyrö 2004)
 > http://www.sis.uta.fi/~hh56766/pubs/awoca04.pdf
 
-Large string algorithm (used when previous algorithm would require >32 bit)
-
-> An input sensitive online algorithm for LCS computation (Hyyrö 2009)
-> http://www.stringology.org/event/2009/p18.html
-> http://www.stringology.org/event/2009/psc09p18_presentation.pdf
-
 Pack multiple token into a single parallel computation
 
 > Increased Bit-Parallelism
 > for Approximate and Multiple String Matching (Hyyrö 2006)
 > http://www.dcc.uchile.cl/~gnavarro/ps/jea06.pdf
+
+Large string algorithm (used when previous algorithm would require >32 bit)
+
+> An input sensitive online algorithm for LCS computation (Hyyrö 2009)
+> http://www.stringology.org/event/2009/p18.html
+> http://www.stringology.org/event/2009/psc09p18_presentation.pdf
 
 Sequence alignment (highlight)
 > Smith Waterman Gotoh
