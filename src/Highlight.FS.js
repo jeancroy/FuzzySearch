@@ -14,7 +14,7 @@
     var FuzzySearch;
 
     if (typeof require === 'function') {
-        FuzzySearch = require("FuzzySearch")
+        FuzzySearch = require("FuzzySearch");
     } else {
         FuzzySearch = window["FuzzySearch"];
     }
@@ -45,17 +45,21 @@
 
     /**
      * Highlight a string using query stored in a FuzzySearch object.
-     * @param {String} str
+     * @param {string} str
+     * @param {string=} field
      */
-    FuzzySearch.prototype.highlight = function (str) {
-        return FuzzySearch.highlight(this.query.normalized, str, this)
+    FuzzySearch.prototype.highlight = function (str, field) {
+        var i, tnorm;
+        var qnorm = this.query.normalized;
+        if (field && field.length && (i = this.tags.indexOf(field)) > -1 && (tnorm = this.query.tagged_norm[i])) qnorm += (qnorm.length?" ":"") + tnorm;
+        return FuzzySearch.highlight(qnorm, str, this)
     };
 
     /**
      * Highlight string b, from searching a in it.
      *
-     * @param {String} a - string to search
-     * @param {String} b - string to highlight
+     * @param {string} a - string to search
+     * @param {string} b - string to highlight
      * @param {FuzzySearch=} options
      *
      */
@@ -69,8 +73,8 @@
         var opt_score_tok = options.score_per_token;
         var opt_fuse = options.score_test_fused;
 
-        var aa = options.normalize(a);
-        var bb = options.normalize(b);
+        var aa = options.normalize(a).trim();
+        var bb = options.normalize(b).trim();
 
         var a_tokens = aa.split(" ");
         var b_tokens = bb.split(" ");
@@ -87,7 +91,7 @@
         //Test "spacebar is broken" no token match
         if (opt_fuse || !opt_score_tok) fused_score = FuzzySearch.score_map(aa, bb, FuzzySearch.alphabet(aa), options);
 
-        if (match_score === 0 && fused_score===0) return b; //shortcut no match
+        if (match_score === 0 && fused_score === 0) return b; //shortcut no match
 
 
         if (!opt_score_tok || fused_score > match_score) {
@@ -157,8 +161,8 @@
      * Build sequences of matches, called send array (seq_start,seq_end) to store them
      * Return match score
      *
-     * @param {String} a -  string to search
-     * @param {String} b - string to be searched
+     * @param {string} a -  string to search
+     * @param {string} b - string to be searched
      * @param {Number[]} seq_start - store for match start
      * @param {Number[]} seq_end - store for match end
      * @param {FuzzySearch=} options
@@ -169,11 +173,12 @@
 
         if (options === undefined) options = FuzzySearch.defaultOptions;
 
-        var wm = 1.0;   // score to making a match
-        var wo = -0.1;  // score to open a gap
-        var we = -0.01; // score to continue an open gap
+        var wm = 100; // score of making a match
+        var wo = -10; // score to open a gap
+        var we = -1;  // score to continue an open gap
 
-        var STOP = 0; //Traceback direction constant
+        //Traceback directions constants
+        var STOP = 0;
         var UP = 1;
         var LEFT = 2;
         var DIAGONAL = 3;
@@ -187,28 +192,28 @@
         //
         var i, j;
         var k = m < n ? m : n;
-        var prefixlen = 0;
+        var prefix_len = 0;
 
         if (a === b) {
             //speedup equality
-            prefixlen = m;
+            prefix_len = m;
             m = 0;
         }
         else if (options.highlight_prefix) {
-            for (i = 0; i < k && (a[i] === b[i]); i++) prefixlen++;
+            for (i = 0; i < k && (a[i] === b[i]); i++) prefix_len++;
 
-            if (prefixlen) {
-                a = a.substring(prefixlen);
-                b = b.substring(prefixlen);
+            if (prefix_len) {
+                a = a.substring(prefix_len);
+                b = b.substring(prefix_len);
 
-                m -= prefixlen;
-                n -= prefixlen;
+                m -= prefix_len;
+                n -= prefix_len;
             }
         }
 
         var vmax = 0, imax = 0, jmax = 0;
 
-        var traceback = new Array(m * n);
+        var trace = new Array(m * n);
         var pos = n - 1;
 
         //m,n = length+1
@@ -221,7 +226,7 @@
             for (j = 0; j < n; j++) {
                 gapArow[j] = 0;
                 vrow[j] = 0;
-                traceback[j] = STOP;
+                trace[j] = STOP;
             }
 
             for (i = 1; i < m; i++) {
@@ -230,7 +235,7 @@
                 vd = vrow[0];
 
                 pos++;
-                traceback[pos] = STOP;
+                trace[pos] = STOP;
 
                 for (j = 1; j < n; j++) {
 
@@ -260,7 +265,7 @@
                         // what triggered the best score ?
 
                         case align:
-                            traceback[pos] = DIAGONAL;
+                            trace[pos] = DIAGONAL;
 
                             if (v > vmax) {
                                 vmax = v;
@@ -271,15 +276,15 @@
                             break;
 
                         case gapB:
-                            traceback[pos] = LEFT;
+                            trace[pos] = LEFT;
                             break;
 
                         case gapA:
-                            traceback[pos] = UP;
+                            trace[pos] = UP;
                             break;
 
                         default:
-                            traceback[pos] = STOP;
+                            trace[pos] = STOP;
                             break;
 
                     }
@@ -308,13 +313,13 @@
             j = jmax;
             pos = i * n + j;
             last_match = jmax;
-            seq_end.push(jmax + prefixlen);
+            seq_end.push(jmax + prefix_len);
 
 
             var backtrack = true;
             while (backtrack) {
 
-                switch (traceback[pos]) {
+                switch (trace[pos]) {
 
                     case UP:
                         i--;
@@ -333,8 +338,8 @@
                         // (unless we want to bridge the gap)
 
                         if (last_match - j > bridge) {
-                            seq_start.push(last_match + prefixlen);
-                            seq_end.push(j + prefixlen);
+                            seq_start.push(last_match + prefix_len);
+                            seq_end.push(j + prefix_len);
                         }
 
                         j--;
@@ -352,12 +357,12 @@
             }
 
             //first matched char
-            seq_start.push(last_match + prefixlen);
+            seq_start.push(last_match + prefix_len);
 
         }
 
 
-        if (prefixlen) {
+        if (prefix_len) {
 
             if (last_match > 0 && last_match <= bridge) {
 
@@ -368,7 +373,7 @@
 
                 //add prefix to matches
                 seq_start.push(0);
-                seq_end.push(prefixlen);
+                seq_end.push(prefix_len);
 
             }
 
@@ -378,7 +383,7 @@
         seq_start.reverse();
         seq_end.reverse();
 
-        return vmax + prefixlen;
+        return vmax + prefix_len;
 
 
     };
@@ -419,8 +424,8 @@
     /**
      * Match token of A again token of B, under constraint that tokens can be matched at most once.
      *
-     * @param {String[]} a_tokens
-     * @param {String[]} b_tokens
+     * @param {string[]} a_tokens
+     * @param {string[]} b_tokens
      * @param {Number[]} match - array to store results
      * @param {FuzzySearch=} options
      * @param {Boolean=} flip - if true score A against B, but return index of B against A.
@@ -444,7 +449,7 @@
         var a_tok, b_tok, a_mp;
 
         var rowmax = minimum_match, imax = -1, jmax = -1, v;
-        var matchcount = 0;
+        var match_count = 0;
         var thresholds = [];
 
         for (i = 0; i < m; i++) {
@@ -454,19 +459,26 @@
             rowmax = minimum_match;
 
             a_tok = a_tokens[i];
-            if (!a_tok.length) continue;
+            if (!a_tok.length){
+                //skip score loop but still fill array
+                for (j = 0; j < n; j++) row[j] = 0;
+                continue;
+            }
 
             a_mp = a_maps[i];
 
             for (j = 0; j < n; j++) {
 
                 b_tok = b_tokens[j];
-                if (!b_tok.length) continue;
+                if (!b_tok.length){
+                    row[j] = 0;
+                    continue;
+                }
 
                 v = FuzzySearch.score_map(a_tok, b_tok, a_mp, options);
                 row[j] = v;
 
-                if (v > minimum_match) matchcount++;
+                if (v > minimum_match) match_count++;
 
                 if (v > rowmax) {
                     rowmax = v;
@@ -482,10 +494,10 @@
         }
 
         //Shortcut: no match
-        if (matchcount === 0) return 0;
+        if (match_count === 0) return 0;
 
         //Shortcut: single possible pairing
-        if (matchcount === 1) {
+        if (match_count === 1) {
             match[imax] = jmax;
             if (flip) _flipmatch(match, n);
             return rowmax
@@ -522,12 +534,12 @@
      */
     function _matchScoreGrid(C, match, thresholds) {
 
-        var ilen = C.length;
+        var i_len = C.length;
         var i, j;
 
         //Traverse score grid to find best permutation
         var score_tree = [];
-        for (i = 0; i < ilen; i++) {
+        for (i = 0; i < i_len; i++) {
             score_tree[i] = {};
         }
 
@@ -535,7 +547,7 @@
 
         var used = 0, item;
 
-        for (i = 0; i < ilen; i++) {
+        for (i = 0; i < i_len; i++) {
 
             item = score_tree[i][used];
             if (!item) break;

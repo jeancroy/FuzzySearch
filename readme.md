@@ -197,6 +197,27 @@ Flip side of allowing Multiple field matching is giving preference to words in t
 Score is average of
  1. best score, every query token on the best field for the item
  2. best score, every query token on any field (their best field)
+ 
+### Tagged search
+
+By default any query keyword can match against any field, but you can use tagged search syntax to specify which field to match. 
+- `fieldname:` my specific query
+- part that match any field `fieldname:` match specific field
+- match any `fieldname:` match1 `fieldtwo:` match another
+
+Anything before `field:` separator perform normal match. Everything after a separator, up to the next one, match only on specified field.
+We recognize reserved field name and will treat `something-else:` as a normal word rather than a separator.
+
+Field name come from key path, this example produce separator `title:` and `author.fullName:`  
+```javascript
+keys = ['title','author.fullName']
+```
+
+You can use alias feature to specify how you want to name each field, this example produce separator `title:` and `author:`  
+```javascript
+keys = {title:'title',author:'author.fullName'}
+```
+
 
 ### Output score threshold
 

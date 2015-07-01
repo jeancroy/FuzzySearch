@@ -113,6 +113,7 @@
     /** @lends {FuzzySearch.prototype} */{
         tags: [],     // alternative name for each key, support ouput alias and per key search
         index: [],    // source is processed using keys, then stored here
+        tags_re:null,
 
         //Information on last search
         query: null,
@@ -182,14 +183,20 @@
      *
      * @param {string} normalized
      * @param {Array.<PackInfo>} tokens_groups
+     * @param {boolean} has_tags
+     * @param {Array.<string>} tagnorm
+     * @param {Array.< Array.<PackInfo> | null>} tags
      * @param {string} fused_str
      * @param {Object} fused_map
      * @constructor
      */
 
-    function Query(normalized, tokens_groups, fused_str, fused_map) {
+    function Query(normalized, tokens_groups, has_tags,tagnorm, tags, fused_str, fused_map) {
         this.normalized = normalized;
         this.tokens_groups = tokens_groups;
+        this.has_tags = has_tags;
+        this.tagged_norm = tagnorm;
+        this.tagged_group = tags;
         this.fused_str = fused_str;
         this.fused_score = 0;
         this.fused_map = fused_map;
@@ -298,55 +305,65 @@
                 else this.output_map = removePrefix(this.output_map, ["root", "."]);
             }
 
-
             // Input stage, work to allow different syntax for keys definition is done here.
+            var oKeys;
+            if ( ("keys" in options) && ( ( oKeys = options.keys) !== undefined) ) {
 
-            var okeys;
-            if ("keys" in options && ( okeys = options.keys) !== undefined) {
-
-                var key_type = Object.prototype.toString.call(okeys);
-                var key_len = okeys.length;
+                var key_type = Object.prototype.toString.call(oKeys);
+                var key_index, nb_keys;
 
                 this.tags = null;
 
                 if (key_type === "[object String]") {
-                    this.keys = key_len ? [okeys] : [];
+                    this.keys = oKeys.length ? [oKeys] : [];
                 }
 
                 else if (key_type === "[object Object]") {
 
-                    this.keys = new Array(key_len);
-                    this.tags = new Array(key_len);
-                    var keyi = 0;
-
-                    for (var tag in okeys) {
-                        if (okeys.hasOwnProperty(tag)) {
-                            this.tags[keyi] = tag;
-                            this.keys[keyi] = okeys[tag];
-                            keyi++;
+                    this.keys = [];
+                    this.tags = []; //we don't know the "length" of dictionary
+                    key_index = 0;
+                    for (var tag in oKeys) {
+                        if (oKeys.hasOwnProperty(tag)) {
+                            this.tags[key_index] = tag;
+                            this.keys[key_index] = oKeys[tag];
+                            key_index++;
                         }
                     }
 
                 }
 
-                this.keys = FuzzySearch.map(this.keys, function (k) {
-                    return removePrefix(k, ["item", "."])
-                });
+                oKeys = this.keys; nb_keys=oKeys.length;
+                for(key_index=-1;++key_index<nb_keys;){
+                    oKeys[key_index] = removePrefix(oKeys[key_index], ["item", "."])
+                }
 
-                if (!this.tags) this.tags = this.keys;
+                if (!this.tags) this.tags = oKeys;
+                this.tags_re = this._buildTagsRE(this.tags);
 
             }
 
-            //
             // Build cache
-            //
-
             if (("source" in options) || ("keys" in options)) {
-
                 this._prepSource(this.source, this.keys, true);
                 this.dirty = false;
-
             }
+
+        },
+
+        _buildTagsRE:function(tags){
+
+            var n = tags.length;
+            if(!n) return null;
+
+            // Build regexp for tagged search
+            var re_escape = /[\-\[\]\/\}\{\(\)\*\+\?\.\\\^\$\|]/g;
+            var tag_str = tags[0].replace(re_escape, "\\$&");
+            for (var i = 0; ++i < n;) {
+                tag_str += "|" + tags[i].replace(re_escape, "\\$&");
+            }
+
+            return  new RegExp("(?:^|\\s)\\s*(" + tag_str + "):\\s*", "g");
 
         },
 
@@ -420,8 +437,12 @@
             var opt_fge = this.field_good_enough;
             var opt_trb = this.thresh_relative_to_best;
             var opt_score_tok = this.score_per_token;
+            var opt_round = this.score_round;
             var thresh_include = this.thresh_include;
             var best_item_score = 0;
+
+            var groups = query.tokens_groups;
+            var qtags  = query.tagged_group;
 
             for (var item_index = -1, nb_items = source.length; ++item_index < nb_items;) {
 
@@ -433,12 +454,10 @@
                 //reset score
                 //
 
-                var groups = query.tokens_groups;
-
                 for (var group_index = -1, nb_groups = groups.length; ++group_index < nb_groups;) {
 
-                    var scitm = groups[group_index].score_item;
-                    for (var i = -1, l = scitm.length; ++i < l;) scitm[i] = 0
+                    var score_item = groups[group_index].score_item;
+                    for (var i = -1, l = score_item.length; ++i < l;) score_item[i] = 0
 
                 }
 
@@ -459,11 +478,15 @@
                     var field_node = -1;
                     var field = item_fields[field_index];
 
+                    var tagged_groups = qtags[field_index]; //tag search
+                    var tagged = !!tagged_groups;
+
                     for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
                         var node_score, node = field[node_index];
 
                         if (opt_score_tok) {
-                            node_score = this._scoreField(node, query);
+                            node_score = this._scoreField(node, groups);
+                            if(tagged) node_score += this._scoreField(node, tagged_groups);//tag search
                         }
                         else
                             node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, this);
@@ -493,13 +516,29 @@
 
                 if (opt_score_tok) {
 
-                    var query_score = 0;
+                    var query_score = 0, group_scores, score_index, nb_scores;
+
                     for (group_index = -1; ++group_index < nb_groups;) {
-                        var group_scores = groups[group_index].score_item;
-                        for (var j = -1, nb_scores = group_scores.length; ++j < nb_scores;) {
-                            query_score += group_scores[j]
+                        group_scores = groups[group_index].score_item;
+                        for (score_index = -1, nb_scores = group_scores.length; ++score_index < nb_scores;) {
+                            query_score += group_scores[score_index]
                         }
                     }
+
+                    if(query.has_tags){
+                        for (field_index = -1; ++field_index < nb_fields;){
+                            tagged_groups = qtags[field_index];
+                            if(!tagged_groups) continue;
+                            var tag_nb_groups = tagged_groups.length;
+                            for (group_index = -1; ++group_index < tag_nb_groups;) {
+                                group_scores = tagged_groups[group_index].score_item;
+                                for ( score_index = -1, nb_scores = group_scores.length; ++score_index < nb_scores;) {
+                                    query_score += group_scores[score_index]
+                                }
+                            }
+                        }
+                    }
+
 
                     if (query.fused_score > query_score) query_score = query.fused_score;
                     item_score = 0.5 * item_score + 0.5 * query_score;
@@ -522,7 +561,7 @@
 
                 if (item_score > thresh_include) {
 
-                    item_score = Math.round(item_score / this.score_round) * this.score_round;
+                    item_score = Math.round(item_score / opt_round) * opt_round;
 
                     results.push(new SearchResult(
                         item.item,
@@ -544,15 +583,17 @@
          * Internal loop that is run for each field in an item
          *
          * @param {Array} field_tokens
-         * @param {Query} query
+         * @param {Array<PackInfo>} groups
          * @returns {number}
          * @private
          */
 
-        _scoreField: function (field_tokens, query) {
+        _scoreField: function (field_tokens, groups) {
 
-            var groups = query.tokens_groups;
+            //var groups = query.tokens_groups;
             var nb_groups = groups.length;
+            if(!nb_groups) return 0;
+
             var nb_tokens = field_tokens.length;
             var field_score = 0, sc;
             var last_index = -1;
@@ -608,16 +649,19 @@
                     sc = best_of_field[i];
                     field_score += sc;
 
-                    if (sc > best_match_this_item[i])
-                        best_match_this_item[i] = sc;
-
                     // if search token are ordered inside subject give a bonus
                     // only consider non empty match for bonus
                     if (sc > minimum_match) {
                         var tmp = best_index[i];
-                        if (tmp > last_index) field_score += bonus_order;
+                        if (tmp > last_index){
+                            field_score += bonus_order;
+                            sc += bonus_order
+                        }
                         last_index = tmp;
                     }
+
+                    if (sc > best_match_this_item[i])
+                        best_match_this_item[i] = sc;
 
                 }
 
@@ -659,12 +703,59 @@
 
         _prepQuery: function (querystring) {
 
-            var norm_query = this.normalize(querystring);
-            var tokens = (this.score_per_token) ? FuzzySearch.filterSize(norm_query.split(" "), this.token_query_min_length, this.token_query_max_length) : [];
-            var groups = FuzzySearch.pack_tokens(tokens);
+            var opt_tok = this.score_per_token;
+            var tags = this.tags;
+            var tags_re = this.tags_re;
+            var nb_tags = tags.length, i;
+
+            var norm_query,groups,taggedQ,tagged_norm,has_tags;
+
+            if( opt_tok && nb_tags && tags_re ){
+
+                var start = 0, end;
+                var q_index = 0;
+                var q_parts = new Array(nb_tags+1);
+
+                var match =  tags_re.exec(querystring);
+                has_tags = (match != null);
+
+                while (match != null) {
+                    end = match.index;
+                    q_parts[q_index] = querystring.substring(start,end);
+                    start = end + match[0].length;
+                    q_index = tags.indexOf(match[1])+1;
+                    match = tags_re.exec(querystring);
+                }
+
+                q_parts[q_index] = querystring.substring(start);
+
+                norm_query = this.normalize(q_parts[0]);
+                groups = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm_query.split(" "), this.token_query_min_length, this.token_query_max_length));
+
+                taggedQ = new Array(nb_tags);
+                tagged_norm = new Array(nb_tags);
+                
+                for( i=-1; ++i<nb_tags; ){
+                    var qp = q_parts[i+1];
+                    var norm = this.normalize( qp );
+                    tagged_norm[i] = norm;
+                    taggedQ[i]=(!qp || qp.length==0 )?null:FuzzySearch.pack_tokens(FuzzySearch.filterSize( norm.split(" "), this.token_query_min_length, this.token_query_max_length));
+                }
+
+            }
+
+            else{
+                norm_query = this.normalize(querystring);
+                groups = opt_tok?FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm_query.split(" "), this.token_query_min_length, this.token_query_max_length)):[];
+                has_tags = false;
+                taggedQ = new Array(nb_tags);
+                tagged_norm = new Array(nb_tags);
+            }
+
             var fused = norm_query.substring(0, this.token_fused_max_length);
-            var map = (this.score_test_fused || !this.score_per_token ) ? FuzzySearch.alphabet(fused) : {};
-            return new Query(norm_query, groups, fused, map)
+            var fused_map = (this.score_test_fused||!opt_tok) ? FuzzySearch.alphabet(fused) : {};
+
+            return new Query(norm_query, groups, has_tags, tagged_norm, taggedQ, fused, fused_map)
 
         },
 
@@ -1705,3 +1796,5 @@
 
  return lcs.reverse().join('');
  }*/
+
+

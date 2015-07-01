@@ -3,7 +3,7 @@
 <head lang="en">
 
     <meta charset="UTF-8">
-    <title></title>
+    <title>Demo page for FuzzySearch Suggestion engine</title>
 
     <link href="demo.css" rel="stylesheet" type="text/css" />
 
@@ -12,9 +12,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
 
     <script src="../dist/FuzzySearch.min.js"></script>
-    <!--script src="../src/FuzzySearch.js"></script-->
     <script src="../dist/Highlight.FS.min.js"></script>
 
+    <!--
+    <script src="../src/FuzzySearch.js"></script>
+    <script src="../src/Highlight.FS.js"></script>
+    -->
 
 </head>
 <body>
@@ -34,15 +37,20 @@
 </div>
 
 
+
 <h2>Using Jquery UI Autocomplete</h2>
 
 <div class="typeahead">
     <input id="demo-query-ui-auto" class="twitter-typeahead" name="demo-query-ui-auto" autocomplete="off" type="text">
 </div>
 
-
-
 <form>
+
+        <div style="text-align: left;display:inline-block; width:90%; max-width:450px; margin:auto; clear:both; margin-top:40px" >
+            <strong>Tip!</strong> Your query can match multiple field, for example
+            "war&nbsp;scalzi" will score in both title and author fields. You can also use <strong>title:</strong> or  <strong>author:</strong> to match a specific field
+        </div>
+
         <h2>Dataset</h2>
 
         <div style="text-align: left; display:block; width:90%; max-width:400px; margin:auto" >
@@ -108,10 +116,13 @@
         //This template is the same despite the fact source input change format.
         //This is because we use alias option to transform output.
 
+        // to make the specific search (title:, author:) work with highlight
+        // the highlight function take an optional second argument: tag name (alias)
+
         return [
             "<div>",
-            "<span class='title'>\"", fuzzyhound.highlight(suggestion.title), "\"</span>",
-            "<span class='author'>", (suggestion.author)? " by " + fuzzyhound.highlight(suggestion.author): "" , "</span>",
+            "<span class='title'>\"", fuzzyhound.highlight(suggestion.title,"title"), "\"</span>",
+            "<span class='author'>", (suggestion.author)? " by " + fuzzyhound.highlight(suggestion.author,"author"): "" , "</span>",
             "<span class='score' title='", suggestion._match ,"'>(&nbsp;", suggestion._score.toFixed(2), "&nbsp;)</span>",
             "</div>"
         ].join("");
