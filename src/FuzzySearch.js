@@ -183,24 +183,76 @@
      *
      * @param {string} normalized
      * @param {Array.<PackInfo>} tokens_groups
-     * @param {boolean} has_tags
-     * @param {Array.<string>} tagnorm
-     * @param {Array.< Array.<PackInfo> | null>} tags
      * @param {string} fused_str
      * @param {Object} fused_map
+     * @param {boolean} has_children
+     * @param {Array<Query>} children
+     *
      * @constructor
      */
 
-    function Query(normalized, tokens_groups, has_tags,tagnorm, tags, fused_str, fused_map) {
+    function Query(normalized, tokens_groups, fused_str, fused_map, has_children, children) {
+
         this.normalized = normalized;
         this.tokens_groups = tokens_groups;
-        this.has_tags = has_tags;
-        this.tagged_norm = tagnorm;
-        this.tagged_group = tags;
+
         this.fused_str = fused_str;
-        this.fused_score = 0;
         this.fused_map = fused_map;
+        this.fused_score = 0;
+
+        this.has_children = has_children;
+        this.children = children;
+
     }
+
+    Query.prototype.resetItem = function(){
+        var groups = this.tokens_groups;
+
+        for (var group_index = -1, nb_groups = groups.length; ++group_index < nb_groups;) {
+            var score_item = groups[group_index].score_item;
+            for (var i = -1, l = score_item.length; ++i < l;) score_item[i] = 0
+
+        }
+
+        this.fused_score = 0;
+
+        if(this.has_children){
+            var children = this.children;
+            for (var child_index = -1, nb_child = children.length; ++child_index < nb_child;){
+                var child = children[child_index];
+                if(child) child.resetItem();
+            }
+        }
+
+    };
+
+    Query.prototype.scoreItem = function(){
+
+        var query_score = 0;
+        var groups = this.tokens_groups;
+
+        for (var group_index = -1, nb_groups = groups.length; ++group_index < nb_groups;) {
+            var group_scores = groups[group_index].score_item;
+            for (var score_index = -1, nb_scores = group_scores.length; ++score_index < nb_scores;) {
+                query_score += group_scores[score_index]
+            }
+        }
+
+        if (this.fused_score > query_score) query_score = this.fused_score;
+
+        if(this.has_children){
+            var children = this.children;
+            for (var child_index = -1, nb_child = children.length; ++child_index < nb_child;){
+                var child = children[child_index];
+                if(child) query_score += child.scoreItem();
+            }
+        }
+
+        return query_score;
+
+    };
+
+
 
     /**
      * Hold a group of token for parallel scoring
@@ -236,6 +288,7 @@
      * @constructor
      * @extends Indexed
      */
+
     function SearchResult(item, fields, item_score, matched_field_index, matched_field_sub, sortkey) {
         this.item = item;
         this.fields = fields;
@@ -246,7 +299,7 @@
     }
 
     /**
-     * Original item with cached normalised field
+     * Original item with cached normalized field
      *
      * @param {*} original
      * @param {Array.<string>} fields
@@ -357,7 +410,7 @@
             if(!n) return null;
 
             // Build regexp for tagged search
-            var re_escape = /[\-\[\]\/\}\{\(\)\*\+\?\.\\\^\$\|]/g;
+            var re_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
             var tag_str = tags[0].replace(re_escape, "\\$&");
             for (var i = 0; ++i < n;) {
                 tag_str += "|" + tags[i].replace(re_escape, "\\$&");
@@ -441,8 +494,7 @@
             var thresh_include = this.thresh_include;
             var best_item_score = 0;
 
-            var groups = query.tokens_groups;
-            var qtags  = query.tagged_group;
+            var sub_query  = query.children;
 
             for (var item_index = -1, nb_items = source.length; ++item_index < nb_items;) {
 
@@ -450,18 +502,8 @@
                 var item = source[item_index];
                 var item_fields = item.fields;
 
-                //
                 //reset score
-                //
-
-                for (var group_index = -1, nb_groups = groups.length; ++group_index < nb_groups;) {
-
-                    var score_item = groups[group_index].score_item;
-                    for (var i = -1, l = score_item.length; ++i < l;) score_item[i] = 0
-
-                }
-
-                query.fused_score = 0;
+                query.resetItem();
 
                 var item_score = 0;
                 var matched_field_index = -1;
@@ -478,15 +520,15 @@
                     var field_node = -1;
                     var field = item_fields[field_index];
 
-                    var tagged_groups = qtags[field_index]; //tag search
-                    var tagged = !!tagged_groups;
+                    var child_query = sub_query[field_index]; //tag search
+                    var tagged = !!child_query;
 
                     for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
                         var node_score, node = field[node_index];
 
                         if (opt_score_tok) {
-                            node_score = this._scoreField(node, groups);
-                            if(tagged) node_score += this._scoreField(node, tagged_groups);//tag search
+                            node_score = this._scoreField(node, query);
+                            if(tagged) node_score += this._scoreField(node, child_query);//tag search
                         }
                         else
                             node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, this);
@@ -516,31 +558,7 @@
 
                 if (opt_score_tok) {
 
-                    var query_score = 0, group_scores, score_index, nb_scores;
-
-                    for (group_index = -1; ++group_index < nb_groups;) {
-                        group_scores = groups[group_index].score_item;
-                        for (score_index = -1, nb_scores = group_scores.length; ++score_index < nb_scores;) {
-                            query_score += group_scores[score_index]
-                        }
-                    }
-
-                    if(query.has_tags){
-                        for (field_index = -1; ++field_index < nb_fields;){
-                            tagged_groups = qtags[field_index];
-                            if(!tagged_groups) continue;
-                            var tag_nb_groups = tagged_groups.length;
-                            for (group_index = -1; ++group_index < tag_nb_groups;) {
-                                group_scores = tagged_groups[group_index].score_item;
-                                for ( score_index = -1, nb_scores = group_scores.length; ++score_index < nb_scores;) {
-                                    query_score += group_scores[score_index]
-                                }
-                            }
-                        }
-                    }
-
-
-                    if (query.fused_score > query_score) query_score = query.fused_score;
+                    var query_score = query.scoreItem();
                     item_score = 0.5 * item_score + 0.5 * query_score;
 
                 }
@@ -583,14 +601,14 @@
          * Internal loop that is run for each field in an item
          *
          * @param {Array} field_tokens
-         * @param {Array<PackInfo>} groups
+         * @param {Query} query
          * @returns {number}
          * @private
          */
 
-        _scoreField: function (field_tokens, groups) {
+        _scoreField: function (field_tokens, query) {
 
-            //var groups = query.tokens_groups;
+            var groups = query.tokens_groups;
             var nb_groups = groups.length;
             if(!nb_groups) return 0;
 
@@ -609,6 +627,8 @@
                 var nb_scores = group_tokens.length;
                 var single = (nb_scores == 1);
 
+                //each packinfo/group have their own reusable scratch pad
+                // to store best score information, how neat :)
                 var best_of_field = group_info.score_field;
                 for (i = -1; ++i < nb_scores;) best_of_field[i] = 0
 
@@ -704,11 +724,16 @@
         _prepQuery: function (querystring) {
 
             var opt_tok = this.score_per_token;
+            var opt_fuse = this.score_test_fused;
+            var opt_fuselen = this.token_fused_max_length;
+            var opt_qmin = this.token_field_min_length;
+            var opt_qmax = this.token_field_max_length;
+
             var tags = this.tags;
             var tags_re = this.tags_re;
-            var nb_tags = tags.length, i;
+            var nb_tags = tags.length;
 
-            var norm_query,groups,taggedQ,tagged_norm,has_tags;
+            var norm,fused,fused_map,children,has_tags, group;
 
             if( opt_tok && nb_tags && tags_re ){
 
@@ -729,33 +754,38 @@
 
                 q_parts[q_index] = querystring.substring(start);
 
-                norm_query = this.normalize(q_parts[0]);
-                groups = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm_query.split(" "), this.token_query_min_length, this.token_query_max_length));
+                children = new Array(nb_tags);
 
-                taggedQ = new Array(nb_tags);
-                tagged_norm = new Array(nb_tags);
-                
-                for( i=-1; ++i<nb_tags; ){
-                    var qp = q_parts[i+1];
-                    var norm = this.normalize( qp );
-                    tagged_norm[i] = norm;
-                    taggedQ[i]=(!qp || qp.length==0 )?null:FuzzySearch.pack_tokens(FuzzySearch.filterSize( norm.split(" "), this.token_query_min_length, this.token_query_max_length));
+                for(var i=-1; ++i<nb_tags; ){
+
+                    var qp  = q_parts[i+1];
+                    if(!qp || !qp.length) continue;
+
+                    norm = this.normalize( qp );
+                    fused = norm.substring(0, opt_fuselen);
+                    fused_map = (opt_fuse||!opt_tok) ? FuzzySearch.alphabet(fused) : {};
+                    group = FuzzySearch.pack_tokens(FuzzySearch.filterSize( norm.split(" "), opt_qmin, opt_qmax));
+
+                    children[i] = new Query(norm,group,fused,fused_map,false,[]);
                 }
+
+
+                norm = this.normalize(q_parts[0]);
+                group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
 
             }
 
             else{
-                norm_query = this.normalize(querystring);
-                groups = opt_tok?FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm_query.split(" "), this.token_query_min_length, this.token_query_max_length)):[];
+                norm = this.normalize(querystring);
+                group = opt_tok?FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), this.token_query_min_length, this.token_query_max_length)):[];
                 has_tags = false;
-                taggedQ = new Array(nb_tags);
-                tagged_norm = new Array(nb_tags);
+                children = new Array(nb_tags);
             }
 
-            var fused = norm_query.substring(0, this.token_fused_max_length);
-            var fused_map = (this.score_test_fused||!opt_tok) ? FuzzySearch.alphabet(fused) : {};
+            fused = norm.substring(0, opt_fuselen);
+            fused_map = (opt_fuse||!opt_tok) ? FuzzySearch.alphabet(fused) : {};
 
-            return new Query(norm_query, groups, has_tags, tagged_norm, taggedQ, fused, fused_map)
+            return new Query(norm, group, fused, fused_map, has_tags,  children)
 
         },
 
@@ -965,7 +995,7 @@
         var n = prefixes.length;
         var offset = 0;
 
-        for (i = -1; ++i < n;) {
+        for (var i = -1; ++i < n;) {
             var p = prefixes[i], l = p.length;
             if (str.substr(offset, l) === p) offset += l;
         }
@@ -978,14 +1008,19 @@
     //   Input stage prepare field for search
     //- - - - - - - - - - - - - - - - - - - - - -
 
-    // replace most common accents in french-spanish by their base letter
-    //"ãàáäâæẽèéëêìíïîõòóöôœùúüûñç"
-    var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
-    var to = "aaaaaaeeeeeiiiioooooouuuunc";
-    var diacriticsMap = {};
-    for (var i = 0; i < from.length; i++) {
-        diacriticsMap[from[i]] = to[i]
+    function getDiacriticsMap(){
+        // replace most common accents in french-spanish by their base letter
+        //"ãàáäâæẽèéëêìíïîõòóöôœùúüûñç"
+        var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
+        var to = "aaaaaaeeeeeiiiioooooouuuunc";
+        var diacriticsMap = {};
+        for (var i = 0; i < from.length; i++) {
+            diacriticsMap[from[i]] = to[i]
+        }
+        return diacriticsMap;
     }
+
+    var diacriticsMap = getDiacriticsMap();
 
     /**
      * Take a string into a normal form. Allow to compare in a case insensitive way.
@@ -993,7 +1028,7 @@
      * Finally standardize token separator to be a single space.
      *
      * @param {string} str
-     * @returns {string} - normalised str
+     * @returns {string} - normalized str
      */
     function normalize(str) {
         if (!str)return "";

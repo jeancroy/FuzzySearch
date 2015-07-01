@@ -49,9 +49,9 @@
      * @param {string=} field
      */
     FuzzySearch.prototype.highlight = function (str, field) {
-        var i, tnorm;
+        var i, subq;
         var qnorm = this.query.normalized;
-        if (field && field.length && (i = this.tags.indexOf(field)) > -1 && (tnorm = this.query.tagged_norm[i])) qnorm += (qnorm.length?" ":"") + tnorm;
+        if (field && field.length && (i = this.tags.indexOf(field)) > -1 && (subq = this.query.children[i])) qnorm += (qnorm.length?" ":"") + subq.normalized;
         return FuzzySearch.highlight(qnorm, str, this)
     };
 
