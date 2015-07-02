@@ -51,7 +51,7 @@
     FuzzySearch.prototype.highlight = function (str, field) {
         var i, subq;
         var qnorm = this.query.normalized;
-        if (field && field.length && (i = this.tags.indexOf(field)) > -1 && (subq = this.query.children[i])) qnorm += (qnorm.length?" ":"") + subq.normalized;
+        if (field && field.length && (i = this.tags.indexOf(field)) > -1 && (subq = this.query.children[i])) qnorm += (qnorm.length ? " " : "") + subq.normalized;
         return FuzzySearch.highlight(qnorm, str, this)
     };
 
@@ -88,7 +88,7 @@
             match_score = FuzzySearch.matchTokens(a_tokens, b_tokens, match_list, options, true);
         }
 
-        //Test "spacebar is broken" no token match
+        //Test "space bar is broken" no token match
         if (opt_fuse || !opt_score_tok) fused_score = FuzzySearch.score_map(aa, bb, FuzzySearch.alphabet(aa), options);
 
         if (match_score === 0 && fused_score === 0) return b; //shortcut no match
@@ -163,8 +163,8 @@
      *
      * @param {string} a -  string to search
      * @param {string} b - string to be searched
-     * @param {Number[]} seq_start - store for match start
-     * @param {Number[]} seq_end - store for match end
+     * @param {Array.<number>} seq_start - store for match start
+     * @param {Array.<number>} seq_end - store for match end
      * @param {FuzzySearch=} options
      * @returns {number}
      */
@@ -424,12 +424,12 @@
     /**
      * Match token of A again token of B, under constraint that tokens can be matched at most once.
      *
-     * @param {string[]} a_tokens
-     * @param {string[]} b_tokens
-     * @param {Number[]} match - array to store results
+     * @param {Array.<string>} a_tokens
+     * @param {Array.<string>} b_tokens
+     * @param {Array.<number>} match - array to store results
      * @param {FuzzySearch=} options
-     * @param {Boolean=} flip - if true score A against B, but return index of B against A.
-     * @returns {Number} Score of the best match combination.
+     * @param {boolean=} flip - if true score A against B, but return index of B against A.
+     * @returns {number} Score of the best match combination.
      */
     FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options, flip) {
 
@@ -459,7 +459,7 @@
             rowmax = minimum_match;
 
             a_tok = a_tokens[i];
-            if (!a_tok.length){
+            if (!a_tok.length) {
                 //skip score loop but still fill array
                 for (j = 0; j < n; j++) row[j] = 0;
                 continue;
@@ -470,7 +470,7 @@
             for (j = 0; j < n; j++) {
 
                 b_tok = b_tokens[j];
-                if (!b_tok.length){
+                if (!b_tok.length) {
                     row[j] = 0;
                     continue;
                 }
@@ -526,10 +526,10 @@
      * This is mostly a preparation phase for _buildScoreTree as well
      * as a post processing traversal to recover the match.
      *
-     * @param {Number[][]} C - precomputed score
-     * @param {Number[]} match - store the position of best matches
-     * @param thresholds - Information about the minimum score each token is willing to match
-     * @returns {Number} - best score
+     * @param {Array.<Array.<number>>} C - precomputed score
+     * @param {Array.<number>} match - store the position of best matches
+     * @param {Array.<number>} thresholds - Information about the minimum score each token is willing to match
+     * @returns {number} - best score
      * @private
      */
     function _matchScoreGrid(C, match, thresholds) {
@@ -589,11 +589,11 @@
      * - Prune branch below token threshold.
      * - Build a tree to cache sub-problem for which we already have a solution
      *
-     * @param {Number[][]} C
-     * @param {Object[]} cache_tree
-     * @param {Number} used_mask
-     * @param {Number} depth
-     * @param {Number} score_thresholds
+     * @param {Array.< Array.<number> >} C
+     * @param {Array< Object.<number, MatchTryout> >} cache_tree
+     * @param {number} used_mask
+     * @param {number} depth
+     * @param {Array.<number>} score_thresholds
      * @returns {number} score
      * @private
      */
@@ -674,8 +674,8 @@
      *
      * Array is modified in place
      *
-     * @param {Number[]} match - array to remap
-     * @param {Number} newlen - length of B
+     * @param {Array.<number>} match - array to remap
+     * @param {number} newlen - length of B
      * @private
      */
 
