@@ -1,4 +1,4 @@
-/** @lends {FuzzySearch.prototype} */
+/** @lends {FuzzySearchOptions.prototype} */
 var highlightOptions = {
 
     highlight_prefix: false,         // true: force prefix as part of highlight, (false: minimum gap, slower)
@@ -28,7 +28,7 @@ FuzzySearch.prototype.highlight = function (str, field) {
     var i, subq;
     var qnorm = this.query.normalized;
     if (field && field.length && (i = this.tags.indexOf(field)) > -1 && (subq = this.query.children[i])) qnorm += (qnorm.length ? " " : "") + subq.normalized;
-    return FuzzySearch.highlight(qnorm, str, this)
+    return FuzzySearch.highlight(qnorm, str, this.options)
 };
 
 /**
@@ -36,7 +36,7 @@ FuzzySearch.prototype.highlight = function (str, field) {
  *
  * @param {string} a - string to search
  * @param {string} b - string to highlight
- * @param {FuzzySearch=} options
+ * @param {FuzzySearchOptions=} options
  *
  */
 FuzzySearch.highlight = function (a, b, options) {
@@ -142,7 +142,7 @@ FuzzySearch.highlight = function (a, b, options) {
  * @param {string} b - string to be searched
  * @param {Array.<number>} seq_start - store for match start
  * @param {Array.<number>} seq_end - store for match end
- * @param {FuzzySearch=} options
+ * @param {FuzzySearchOptions=} options
  * @returns {number}
  */
 
@@ -415,7 +415,7 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
  * @param {Array.<string>} a_tokens
  * @param {Array.<string>} b_tokens
  * @param {Array.<number>} match - array to store results
- * @param {FuzzySearch=} options
+ * @param {FuzzySearchOptions=} options
  * @param {boolean=} flip - if true score A against B, but return index of B against A.
  * @returns {number} Score of the best match combination.
  */

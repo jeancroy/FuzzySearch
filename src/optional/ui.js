@@ -21,9 +21,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     getInteractive: function () {
 
         var self = this;
-        var wait = this.interactive_debounce;
-        var mult = this.interactive_mult;
-        var burst = this.interactive_burst;
+        var options = this.options;
+        var wait = options.interactive_debounce;
+        var mult = options.interactive_mult;
+        var burst = options.interactive_burst;
 
         // Debounce off
         if (wait === 0) {

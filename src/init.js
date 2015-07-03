@@ -12,7 +12,7 @@ function FuzzySearch(options) {
 }
 
 FuzzySearch.defaultOptions =
-/** @lends {FuzzySearch.prototype} */{
+/** @lends {FuzzySearchOptions.prototype} */{
 
     //
     //  Scoring, include in result
@@ -95,7 +95,6 @@ FuzzySearch.defaultOptions =
 
     source: [],
     keys: [],
-    dirty: false, // when true, schedule a source refresh using new or existing source & keys, used once then clear itself.
     lazy: false  // when true, any refresh happens only when a user make a search, option stay put until changed.
 
 
@@ -103,10 +102,15 @@ FuzzySearch.defaultOptions =
 
 var _privates =
 /** @lends {FuzzySearch.prototype} */{
+
     tags: [],     // alternative name for each key, support ouput alias and per key search
     index: [],    // source is processed using keys, then stored here
     tags_re: null,
     acro_re: null,
+
+    /**@type {FuzzySearchOptions}*/
+    options:null,
+    dirty: false, // when true, schedule a source refresh using new or existing source & keys, used once then clear itself.
 
     //Information on last search
     query: null,
@@ -123,6 +127,23 @@ var _privates =
  */
 var INT_SIZE = 32;
 
+function FuzzySearchOptions(defaults,options){
+    for (var key in defaults) {
+        if (defaults.hasOwnProperty(key)) { //fill self with value from either options or default
+            this[key] = (options.hasOwnProperty(key) && options[key] !== undefined ) ? options[key] : defaults[key];
+        }
+    }
+}
+
+FuzzySearchOptions.update = function(self, defaults,options){
+    for (var key in options) {
+        if (options.hasOwnProperty(key) && defaults.hasOwnProperty(key)) {
+            //explicitly set a options to undefined => reset default, else get value
+            self[key] = (options[key] === undefined) ? defaults[key] : options[key];
+        }
+    }
+};
+
 /**
  * Set property of object,
  * Restrict properties that can be set from a list of available defaults.
@@ -137,33 +158,14 @@ var INT_SIZE = 32;
  */
 FuzzySearch.setOptions = function (self, options, defaults, privates, reset, hook) {
 
-    var key;
-
     if (reset) {
-
-        for (key in defaults) {
-            if (defaults.hasOwnProperty(key)) { //fill self with value from either options or default
-                self[key] = (options.hasOwnProperty(key) && options[key] !== undefined ) ? options[key] : defaults[key];
-            }
-        }
-
-        for (key in privates) {
-            if (privates.hasOwnProperty(key)) self[key] = privates[key]
-        }
-
+        extend(self,privates);
+        self.options = new FuzzySearchOptions(defaults,options);
     } else {
-
-        for (key in options) {
-            if (options.hasOwnProperty(key) && defaults.hasOwnProperty(key)) {
-                //explicitly set a options to undefined => reset default, else get value
-                self[key] = (options[key] === undefined) ? defaults[key] : options[key];
-            }
-        }
-
+        FuzzySearchOptions.update(self.options,defaults, options);
     }
 
     hook.call(self, options)
-
 };
 
 function extend(a, b) {
@@ -203,11 +205,19 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     _optionsHook: function (options) {
 
+        //Items of options have been copied into this.options
+        //We still test "optioname in option" to know if we have received something new
+        //This allow to support "shorthand" options and is used to refresh data.
+
+        var selfopt = this.options;
+
         //Output stage
         if ("output_map" in options && typeof options.output_map === "string") {
-            if (this.output_map === "alias") this.output_map = this.aliasResult;
-            else this.output_map = removePrefix(this.output_map, ["root", "."]);
+            if (selfopt.output_map === "alias") selfopt.output_map = this.aliasResult;
+            else selfopt.output_map = removePrefix(selfopt.output_map, ["root", "."]);
         }
+
+        this.source = selfopt.source;
 
         // Input stage, work to allow different syntax for keys definition is done here.
         var oKeys;
@@ -237,6 +247,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
             }
 
+            else{
+                this.keys = oKeys;
+            }
+
             oKeys = this.keys;
             nb_keys = oKeys.length;
             for (key_index = -1; ++key_index < nb_keys;) {
@@ -244,45 +258,23 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             }
 
             if (!this.tags) this.tags = oKeys;
-            this.tags_re = this._buildTagsRE(this.tags);
+            this.tags_re = buildTagsRE(this.tags);
 
         }
 
         if (this.acro_re == null || "acronym_tok" in options) {
-            this.acro_re = this._buildAcronymRE(this.acronym_tok);
+            this.acro_re = buildAcronymRE(selfopt.acronym_tok);
         }
 
+
         // Build cache
-        if (this.dirty || ("source" in options) || ("keys" in options)) {
-            if (this.lazy) this.dirty = true; //Schedule later.
+        if ( options.dirty || ("source" in options) || ("keys" in options)) {
+            if (selfopt.lazy) this.dirty = true; //Schedule later.
             else {
                 this._prepSource(this.source, this.keys, true);
                 this.dirty = false;
             }
         }
-
-    },
-
-    _buildTagsRE: function (tags) {
-
-        var n = tags.length;
-        if (!n) return null;
-
-        var tag_str = re_escape(tags[0]);
-        for (var i = 0; ++i < n;) {
-            tag_str += "|" + re_escape(tags[i]);
-        }
-
-        return new RegExp("(?:^|\\s)\\s*(" + tag_str + "):\\s*", "g");
-
-    },
-
-    _buildAcronymRE: function (sep) {
-
-        var n = sep.length;
-        if (!n) return null;
-        var acro_str = re_escape(sep);
-        return new RegExp("(?:^|[" + acro_str + "])+([^" + acro_str + "])[^" + acro_str + "]*", "g");
 
     }
 
@@ -307,6 +299,29 @@ function removePrefix(str, prefixes) {
     }
 
     return (offset > 0) ? str.substr(offset) : str;
+}
+
+function buildTagsRE(tags) {
+
+    var n = tags.length;
+    if (!n) return null;
+
+    var tag_str = re_escape(tags[0]);
+    for (var i = 0; ++i < n;) {
+        tag_str += "|" + re_escape(tags[i]);
+    }
+
+    return new RegExp("(?:^|\\s)\\s*(" + tag_str + "):\\s*", "g");
+
+}
+
+function buildAcronymRE(sep) {
+
+    var n = sep.length;
+    if (!n) return null;
+    var acro_str = re_escape(sep);
+    return new RegExp("(?:^|[" + acro_str + "])+([^" + acro_str + "])[^" + acro_str + "]*", "g");
+
 }
 
 // Build regexp for tagged search

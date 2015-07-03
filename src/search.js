@@ -14,6 +14,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var clock = (window.performance && window.performance.now) ? window.performance : Date;
         var time_start = clock.now();
         this.start_time = time_start;
+        var options = this.options;
 
         if (this.dirty) {
             this._prepSource(this.source, this.keys, true);
@@ -24,8 +25,8 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var source = this.index;
         var results = [];
 
-        if (this.filter) {
-            source = this.filter.call(this, source);
+        if (options.filter) {
+            source = options.filter.call(this, source);
         }
 
         // ---- MAIN SEARCH LOOP ---- //
@@ -36,14 +37,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         // sort by decreasing order of score
         // equal rounded score: alphabetical order
-        if (typeof this.sorter === "function")
-            results = results.sort(this.sorter);
+        if (typeof options.sorter === "function")
+            results = results.sort(options.sorter);
 
-        if (this.output_map || this.output_limit > 0) {
-            if (typeof this.output_map === "function")
-                results = FuzzySearch.map(results, this.output_map, this, this.output_limit);
+        if (options.output_map || options.output_limit > 0) {
+            if (typeof options.output_map === "function")
+                results = FuzzySearch.map(results, options.output_map, this, options.output_limit);
             else
-                results = FuzzySearch.mapField(results, this.output_map, this.output_limit);
+                results = FuzzySearch.mapField(results, options.output_map, options.output_limit);
         }
 
         var time_end = clock.now();
@@ -69,12 +70,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     _searchIndex: function (query, source, results) {
 
-        var opt_bpd = this.bonus_position_decay;
-        var opt_fge = this.field_good_enough;
-        var opt_trb = this.thresh_relative_to_best;
-        var opt_score_tok = this.score_per_token;
-        var opt_round = this.score_round;
-        var thresh_include = this.thresh_include;
+        var options = this.options;
+        var opt_bpd = options.bonus_position_decay;
+        var opt_fge = options.field_good_enough;
+        var opt_trb = options.thresh_relative_to_best;
+        var opt_score_tok = options.score_per_token;
+        var opt_round = options.score_round;
+        var thresh_include = options.thresh_include;
+
         var best_item_score = 0;
 
         var sub_query = query.children;
@@ -114,7 +117,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                         if (tagged) node_score += this._scoreField(node, child_query);//tag search
                     }
                     else
-                        node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, this);
+                        node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, options);
 
                     if (node_score > field_score) {
                         field_score = node_score;
@@ -198,9 +201,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var nb_tokens = field_tokens.length;
         var field_score = 0, sc;
         var last_index = -1;
+        var options = this.options;
 
-        var bonus_order = this.bonus_token_order;
-        var minimum_match = this.minimum_match;
+        var bonus_order = options.bonus_token_order;
+        var minimum_match = options.minimum_match;
 
         var token, scores, i;
         for (var group_index = -1; ++group_index < nb_groups;) {
@@ -224,7 +228,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
                 if (single) {
 
-                    sc = FuzzySearch.score_map(group_tokens[0], token, group_info.map, this);
+                    sc = FuzzySearch.score_map(group_tokens[0], token, group_info.map, options);
                     if (sc > best_of_field[0]) {
                         best_of_field[0] = sc;
                         best_index[0] = field_tk_index;
@@ -233,7 +237,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 }
                 else {
 
-                    scores = FuzzySearch.score_pack(group_info, token, this);
+                    scores = FuzzySearch.score_pack(group_info, token, options);
                     for (i = -1; ++i < nb_scores;) {
                         sc = scores[i];
                         if (sc > best_of_field[i]) {
@@ -271,9 +275,9 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         }
 
-        if (this.score_test_fused) {
+        if (options.score_test_fused) {
             // test "space bar is broken" no token match
-            var fused_score = FuzzySearch.score_map(query.fused_str, field_tokens.join(" "), query.fused_map, this);
+            var fused_score = FuzzySearch.score_map(query.fused_str, field_tokens.join(" "), query.fused_map, options);
             field_score = fused_score > field_score ? fused_score : field_score;
 
             if (fused_score > query.fused_score) {

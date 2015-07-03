@@ -26,11 +26,12 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     _prepQuery: function (query_string) {
 
-        var opt_tok = this.score_per_token;
-        var opt_fuse = this.score_test_fused;
-        var opt_fuselen = this.token_fused_max_length;
-        var opt_qmin = this.token_field_min_length;
-        var opt_qmax = this.token_field_max_length;
+        var options = this.options;
+        var opt_tok = options.score_per_token;
+        var opt_fuse = options.score_test_fused;
+        var opt_fuselen = options.token_fused_max_length;
+        var opt_qmin = options.token_field_min_length;
+        var opt_qmax = options.token_field_max_length;
 
         var tags = this.tags;
         var tags_re = this.tags_re;
@@ -64,7 +65,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 var qp = q_parts[i + 1];
                 if (!qp || !qp.length) continue;
 
-                norm = this.normalize(qp);
+                norm = options.normalize(qp);
                 fused = norm.substring(0, opt_fuselen);
                 fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
                 group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
@@ -73,14 +74,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             }
 
 
-            norm = this.normalize(q_parts[0]);
+            norm = options.normalize(q_parts[0]);
             group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
 
         }
 
         else {
-            norm = this.normalize(query_string);
-            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), this.token_query_min_length, this.token_query_max_length)) : [];
+            norm = options.normalize(query_string);
+            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), options.token_query_min_length, options.token_query_max_length)) : [];
             has_tags = false;
             children = new Array(nb_tags);
         }

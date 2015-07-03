@@ -24,7 +24,7 @@ function FuzzySearch(options) {
 }
 
 FuzzySearch.defaultOptions =
-/** @lends {FuzzySearch.prototype} */{
+/** @lends {FuzzySearchOptions.prototype} */{
 
     //
     //  Scoring, include in result
@@ -107,7 +107,6 @@ FuzzySearch.defaultOptions =
 
     source: [],
     keys: [],
-    dirty: false, // when true, schedule a source refresh using new or existing source & keys, used once then clear itself.
     lazy: false  // when true, any refresh happens only when a user make a search, option stay put until changed.
 
 
@@ -115,10 +114,15 @@ FuzzySearch.defaultOptions =
 
 var _privates =
 /** @lends {FuzzySearch.prototype} */{
+
     tags: [],     // alternative name for each key, support ouput alias and per key search
     index: [],    // source is processed using keys, then stored here
     tags_re: null,
     acro_re: null,
+
+    /**@type {FuzzySearchOptions}*/
+    options:null,
+    dirty: false, // when true, schedule a source refresh using new or existing source & keys, used once then clear itself.
 
     //Information on last search
     query: null,
@@ -135,6 +139,23 @@ var _privates =
  */
 var INT_SIZE = 32;
 
+function FuzzySearchOptions(defaults,options){
+    for (var key in defaults) {
+        if (defaults.hasOwnProperty(key)) { //fill self with value from either options or default
+            this[key] = (options.hasOwnProperty(key) && options[key] !== undefined ) ? options[key] : defaults[key];
+        }
+    }
+}
+
+FuzzySearchOptions.update = function(self, defaults,options){
+    for (var key in options) {
+        if (options.hasOwnProperty(key) && defaults.hasOwnProperty(key)) {
+            //explicitly set a options to undefined => reset default, else get value
+            self[key] = (options[key] === undefined) ? defaults[key] : options[key];
+        }
+    }
+};
+
 /**
  * Set property of object,
  * Restrict properties that can be set from a list of available defaults.
@@ -149,33 +170,14 @@ var INT_SIZE = 32;
  */
 FuzzySearch.setOptions = function (self, options, defaults, privates, reset, hook) {
 
-    var key;
-
     if (reset) {
-
-        for (key in defaults) {
-            if (defaults.hasOwnProperty(key)) { //fill self with value from either options or default
-                self[key] = (options.hasOwnProperty(key) && options[key] !== undefined ) ? options[key] : defaults[key];
-            }
-        }
-
-        for (key in privates) {
-            if (privates.hasOwnProperty(key)) self[key] = privates[key]
-        }
-
+        extend(self,privates);
+        self.options = new FuzzySearchOptions(defaults,options);
     } else {
-
-        for (key in options) {
-            if (options.hasOwnProperty(key) && defaults.hasOwnProperty(key)) {
-                //explicitly set a options to undefined => reset default, else get value
-                self[key] = (options[key] === undefined) ? defaults[key] : options[key];
-            }
-        }
-
+        FuzzySearchOptions.update(self.options,defaults, options);
     }
 
     hook.call(self, options)
-
 };
 
 function extend(a, b) {
@@ -215,11 +217,19 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     _optionsHook: function (options) {
 
+        //Items of options have been copied into this.options
+        //We still test "optioname in option" to know if we have received something new
+        //This allow to support "shorthand" options and is used to refresh data.
+
+        var selfopt = this.options;
+
         //Output stage
         if ("output_map" in options && typeof options.output_map === "string") {
-            if (this.output_map === "alias") this.output_map = this.aliasResult;
-            else this.output_map = removePrefix(this.output_map, ["root", "."]);
+            if (selfopt.output_map === "alias") selfopt.output_map = this.aliasResult;
+            else selfopt.output_map = removePrefix(selfopt.output_map, ["root", "."]);
         }
+
+        this.source = selfopt.source;
 
         // Input stage, work to allow different syntax for keys definition is done here.
         var oKeys;
@@ -249,6 +259,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
             }
 
+            else{
+                this.keys = oKeys;
+            }
+
             oKeys = this.keys;
             nb_keys = oKeys.length;
             for (key_index = -1; ++key_index < nb_keys;) {
@@ -256,45 +270,23 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             }
 
             if (!this.tags) this.tags = oKeys;
-            this.tags_re = this._buildTagsRE(this.tags);
+            this.tags_re = buildTagsRE(this.tags);
 
         }
 
         if (this.acro_re == null || "acronym_tok" in options) {
-            this.acro_re = this._buildAcronymRE(this.acronym_tok);
+            this.acro_re = buildAcronymRE(selfopt.acronym_tok);
         }
 
+
         // Build cache
-        if (this.dirty || ("source" in options) || ("keys" in options)) {
-            if (this.lazy) this.dirty = true; //Schedule later.
+        if ( options.dirty || ("source" in options) || ("keys" in options)) {
+            if (selfopt.lazy) this.dirty = true; //Schedule later.
             else {
                 this._prepSource(this.source, this.keys, true);
                 this.dirty = false;
             }
         }
-
-    },
-
-    _buildTagsRE: function (tags) {
-
-        var n = tags.length;
-        if (!n) return null;
-
-        var tag_str = re_escape(tags[0]);
-        for (var i = 0; ++i < n;) {
-            tag_str += "|" + re_escape(tags[i]);
-        }
-
-        return new RegExp("(?:^|\\s)\\s*(" + tag_str + "):\\s*", "g");
-
-    },
-
-    _buildAcronymRE: function (sep) {
-
-        var n = sep.length;
-        if (!n) return null;
-        var acro_str = re_escape(sep);
-        return new RegExp("(?:^|[" + acro_str + "])+([^" + acro_str + "])[^" + acro_str + "]*", "g");
 
     }
 
@@ -319,6 +311,29 @@ function removePrefix(str, prefixes) {
     }
 
     return (offset > 0) ? str.substr(offset) : str;
+}
+
+function buildTagsRE(tags) {
+
+    var n = tags.length;
+    if (!n) return null;
+
+    var tag_str = re_escape(tags[0]);
+    for (var i = 0; ++i < n;) {
+        tag_str += "|" + re_escape(tags[i]);
+    }
+
+    return new RegExp("(?:^|\\s)\\s*(" + tag_str + "):\\s*", "g");
+
+}
+
+function buildAcronymRE(sep) {
+
+    var n = sep.length;
+    if (!n) return null;
+    var acro_str = re_escape(sep);
+    return new RegExp("(?:^|[" + acro_str + "])+([^" + acro_str + "])[^" + acro_str + "]*", "g");
+
 }
 
 // Build regexp for tagged search
@@ -355,11 +370,12 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     aliasResult: function (result) {
 
+        var options = this.options;
         var f = FuzzySearch.generateFields(result.item, this.keys);
-        var out = {};
+        var out = {}, tags = this.tags, join_str = options.join_str;
 
         for (var i = -1, n = f.length; ++i < n;) {
-            out[this.tags[i]] = f[i].join(this.join_str)
+            out[tags[i]] = f[i].join(join_str)
         }
 
         out._item = result.item;
@@ -547,11 +563,12 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     _prepQuery: function (query_string) {
 
-        var opt_tok = this.score_per_token;
-        var opt_fuse = this.score_test_fused;
-        var opt_fuselen = this.token_fused_max_length;
-        var opt_qmin = this.token_field_min_length;
-        var opt_qmax = this.token_field_max_length;
+        var options = this.options;
+        var opt_tok = options.score_per_token;
+        var opt_fuse = options.score_test_fused;
+        var opt_fuselen = options.token_fused_max_length;
+        var opt_qmin = options.token_field_min_length;
+        var opt_qmax = options.token_field_max_length;
 
         var tags = this.tags;
         var tags_re = this.tags_re;
@@ -585,7 +602,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 var qp = q_parts[i + 1];
                 if (!qp || !qp.length) continue;
 
-                norm = this.normalize(qp);
+                norm = options.normalize(qp);
                 fused = norm.substring(0, opt_fuselen);
                 fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
                 group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
@@ -594,14 +611,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             }
 
 
-            norm = this.normalize(q_parts[0]);
+            norm = options.normalize(q_parts[0]);
             group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
 
         }
 
         else {
-            norm = this.normalize(query_string);
-            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), this.token_query_min_length, this.token_query_max_length)) : [];
+            norm = options.normalize(query_string);
+            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), options.token_query_min_length, options.token_query_max_length)) : [];
             has_tags = false;
             children = new Array(nb_tags);
         }
@@ -903,7 +920,7 @@ FuzzySearch.pack_tokens = function (tokens) {
  */
 FuzzySearch.prototype.score = function (a, b) {
     var aMap = FuzzySearch.alphabet(a);
-    return FuzzySearch.score_map(a, b, aMap, this);
+    return FuzzySearch.score_map(a, b, aMap, this.options);
 };
 
 // Adapted from paper:
@@ -923,7 +940,7 @@ FuzzySearch.prototype.score = function (a, b) {
  * @param {string} a
  * @param {string} b
  * @param {Object} aMap - See FuzzySearch.alphabet
- * @param {FuzzySearch} options
+ * @param {FuzzySearchOptions} options
  */
 FuzzySearch.score_map = function (a, b, aMap, options) {
 
@@ -996,7 +1013,7 @@ FuzzySearch.score_map = function (a, b, aMap, options) {
  *
  * @param {PackInfo} packinfo
  * @param {string} field_token
- * @param {FuzzySearch} options
+ * @param {FuzzySearchOptions} options
  * @returns {Array.<number>} scores
  */
 FuzzySearch.score_pack = function (packinfo, field_token, options) {
@@ -1305,6 +1322,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var clock = (window.performance && window.performance.now) ? window.performance : Date;
         var time_start = clock.now();
         this.start_time = time_start;
+        var options = this.options;
 
         if (this.dirty) {
             this._prepSource(this.source, this.keys, true);
@@ -1315,8 +1333,8 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var source = this.index;
         var results = [];
 
-        if (this.filter) {
-            source = this.filter.call(this, source);
+        if (options.filter) {
+            source = options.filter.call(this, source);
         }
 
         // ---- MAIN SEARCH LOOP ---- //
@@ -1327,14 +1345,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         // sort by decreasing order of score
         // equal rounded score: alphabetical order
-        if (typeof this.sorter === "function")
-            results = results.sort(this.sorter);
+        if (typeof options.sorter === "function")
+            results = results.sort(options.sorter);
 
-        if (this.output_map || this.output_limit > 0) {
-            if (typeof this.output_map === "function")
-                results = FuzzySearch.map(results, this.output_map, this, this.output_limit);
+        if (options.output_map || options.output_limit > 0) {
+            if (typeof options.output_map === "function")
+                results = FuzzySearch.map(results, options.output_map, this, options.output_limit);
             else
-                results = FuzzySearch.mapField(results, this.output_map, this.output_limit);
+                results = FuzzySearch.mapField(results, options.output_map, options.output_limit);
         }
 
         var time_end = clock.now();
@@ -1360,12 +1378,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     _searchIndex: function (query, source, results) {
 
-        var opt_bpd = this.bonus_position_decay;
-        var opt_fge = this.field_good_enough;
-        var opt_trb = this.thresh_relative_to_best;
-        var opt_score_tok = this.score_per_token;
-        var opt_round = this.score_round;
-        var thresh_include = this.thresh_include;
+        var options = this.options;
+        var opt_bpd = options.bonus_position_decay;
+        var opt_fge = options.field_good_enough;
+        var opt_trb = options.thresh_relative_to_best;
+        var opt_score_tok = options.score_per_token;
+        var opt_round = options.score_round;
+        var thresh_include = options.thresh_include;
+
         var best_item_score = 0;
 
         var sub_query = query.children;
@@ -1405,7 +1425,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                         if (tagged) node_score += this._scoreField(node, child_query);//tag search
                     }
                     else
-                        node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, this);
+                        node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, options);
 
                     if (node_score > field_score) {
                         field_score = node_score;
@@ -1489,9 +1509,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var nb_tokens = field_tokens.length;
         var field_score = 0, sc;
         var last_index = -1;
+        var options = this.options;
 
-        var bonus_order = this.bonus_token_order;
-        var minimum_match = this.minimum_match;
+        var bonus_order = options.bonus_token_order;
+        var minimum_match = options.minimum_match;
 
         var token, scores, i;
         for (var group_index = -1; ++group_index < nb_groups;) {
@@ -1515,7 +1536,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
                 if (single) {
 
-                    sc = FuzzySearch.score_map(group_tokens[0], token, group_info.map, this);
+                    sc = FuzzySearch.score_map(group_tokens[0], token, group_info.map, options);
                     if (sc > best_of_field[0]) {
                         best_of_field[0] = sc;
                         best_index[0] = field_tk_index;
@@ -1524,7 +1545,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 }
                 else {
 
-                    scores = FuzzySearch.score_pack(group_info, token, this);
+                    scores = FuzzySearch.score_pack(group_info, token, options);
                     for (i = -1; ++i < nb_scores;) {
                         sc = scores[i];
                         if (sc > best_of_field[i]) {
@@ -1562,9 +1583,9 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         }
 
-        if (this.score_test_fused) {
+        if (options.score_test_fused) {
             // test "space bar is broken" no token match
-            var fused_score = FuzzySearch.score_map(query.fused_str, field_tokens.join(" "), query.fused_map, this);
+            var fused_score = FuzzySearch.score_map(query.fused_str, field_tokens.join(" "), query.fused_map, options);
             field_score = fused_score > field_score ? fused_score : field_score;
 
             if (fused_score > query.fused_score) {
@@ -1613,10 +1634,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             out_index = nb_items;
 
         var index = this.index;
-        var min_size = this.token_field_min_length;
-        var max_size = this.token_field_max_length;
-
-        var acronym = this.score_acronym;
+        var options = this.options;
+        var min_size = options.token_field_min_length;
+        var max_size = options.token_field_max_length;
+        var acronym = options.score_acronym;
         var acronym_re = this.acro_re;
 
         for (var item_index = -1; ++item_index < nb_items;) {
@@ -1631,7 +1652,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 var field = item_fields[field_index];
                 for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
 
-                    var norm = this.normalize(field[node_index]);
+                    var norm = options.normalize(field[node_index]);
                     var nodes = FuzzySearch.filterSize(norm.split(" "), min_size, max_size);
                     if (acronym) nodes.push(norm.replace(acronym_re, "$1"));
                     field[node_index] = nodes;
@@ -1802,7 +1823,7 @@ FuzzySearch.filterSize = function (array, minSize, maxSize) {
     }
     return out;
 };
-/** @lends {FuzzySearch.prototype} */
+/** @lends {FuzzySearchOptions.prototype} */
 var highlightOptions = {
 
     highlight_prefix: false,         // true: force prefix as part of highlight, (false: minimum gap, slower)
@@ -1832,7 +1853,7 @@ FuzzySearch.prototype.highlight = function (str, field) {
     var i, subq;
     var qnorm = this.query.normalized;
     if (field && field.length && (i = this.tags.indexOf(field)) > -1 && (subq = this.query.children[i])) qnorm += (qnorm.length ? " " : "") + subq.normalized;
-    return FuzzySearch.highlight(qnorm, str, this)
+    return FuzzySearch.highlight(qnorm, str, this.options)
 };
 
 /**
@@ -1840,7 +1861,7 @@ FuzzySearch.prototype.highlight = function (str, field) {
  *
  * @param {string} a - string to search
  * @param {string} b - string to highlight
- * @param {FuzzySearch=} options
+ * @param {FuzzySearchOptions=} options
  *
  */
 FuzzySearch.highlight = function (a, b, options) {
@@ -1946,7 +1967,7 @@ FuzzySearch.highlight = function (a, b, options) {
  * @param {string} b - string to be searched
  * @param {Array.<number>} seq_start - store for match start
  * @param {Array.<number>} seq_end - store for match end
- * @param {FuzzySearch=} options
+ * @param {FuzzySearchOptions=} options
  * @returns {number}
  */
 
@@ -2219,7 +2240,7 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
  * @param {Array.<string>} a_tokens
  * @param {Array.<string>} b_tokens
  * @param {Array.<number>} match - array to store results
- * @param {FuzzySearch=} options
+ * @param {FuzzySearchOptions=} options
  * @param {boolean=} flip - if true score A against B, but return index of B against A.
  * @returns {number} Score of the best match combination.
  */
@@ -2510,9 +2531,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     getInteractive: function () {
 
         var self = this;
-        var wait = this.interactive_debounce;
-        var mult = this.interactive_mult;
-        var burst = this.interactive_burst;
+        var options = this.options;
+        var wait = options.interactive_debounce;
+        var mult = options.interactive_mult;
+        var burst = options.interactive_burst;
 
         // Debounce off
         if (wait === 0) {

@@ -11,7 +11,7 @@
  */
 FuzzySearch.prototype.score = function (a, b) {
     var aMap = FuzzySearch.alphabet(a);
-    return FuzzySearch.score_map(a, b, aMap, this);
+    return FuzzySearch.score_map(a, b, aMap, this.options);
 };
 
 // Adapted from paper:
@@ -31,7 +31,7 @@ FuzzySearch.prototype.score = function (a, b) {
  * @param {string} a
  * @param {string} b
  * @param {Object} aMap - See FuzzySearch.alphabet
- * @param {FuzzySearch} options
+ * @param {FuzzySearchOptions} options
  */
 FuzzySearch.score_map = function (a, b, aMap, options) {
 
@@ -104,7 +104,7 @@ FuzzySearch.score_map = function (a, b, aMap, options) {
  *
  * @param {PackInfo} packinfo
  * @param {string} field_token
- * @param {FuzzySearch} options
+ * @param {FuzzySearchOptions} options
  * @returns {Array.<number>} scores
  */
 FuzzySearch.score_pack = function (packinfo, field_token, options) {

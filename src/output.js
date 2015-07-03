@@ -27,11 +27,12 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     aliasResult: function (result) {
 
+        var options = this.options;
         var f = FuzzySearch.generateFields(result.item, this.keys);
-        var out = {};
+        var out = {}, tags = this.tags, join_str = options.join_str;
 
         for (var i = -1, n = f.length; ++i < n;) {
-            out[this.tags[i]] = f[i].join(this.join_str)
+            out[tags[i]] = f[i].join(join_str)
         }
 
         out._item = result.item;

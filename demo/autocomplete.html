@@ -12,10 +12,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
 
     <script src="../dist/FuzzySearch.min.js"></script>
+    <!--script src="../dist/FuzzySearch.js"></script-->
 
-    <!--
-    <script src="../dist/FuzzySearch.js"></script>
-    -->
 
 
 </head>
@@ -74,10 +72,15 @@
         <h2>Options</h2>
 
         <br><br>
-        <label> <input type="checkbox" name="fused" id="fused" /> Enable fused score & acronym </label><br>
-        <p> Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war",
-            also "jrrt" can match <b>J</b>ohn <b>R</b>onald <b>R</b>euel <b>T</b>olkien
-        </p>
+
+        <div style="text-align: left; display:block; width:90%; max-width:400px; margin:auto" >
+
+            <label><input type="checkbox" name="fused" id="fused" /> Enable score across word "oldmanwar" -> "<b>old man war</b>" </label><br>
+
+            <label><input type="checkbox" name="acro" id="acro" /> Enable acronym score "jrrt" can match <b>J</b>ohn <b>R</b>onald <b>R</b>euel <b>T</b>olkien </label><br>
+
+        </div>
+
 
 </form>
 
@@ -167,37 +170,29 @@
     //    Jquery UI Setup
     // - - - - - - - - - - -
 
-    var jq_auto =
-            $("#demo-query-ui-auto").autocomplete({
-                minLength: 2,
-                delay: 0, //use FuzzySearch debounce
-                source: function (request, response) {
-                    response(fuzzyhound.search(request.term));
-                },
-                messages: {
-                    noResults: '',
-                    results: function () {
-                    }
-                }
-
-            });
+    var $el  = $("#demo-query-ui-auto");
+    $el.autocomplete({
+        minLength: 2,
+        delay: 0, //use FuzzySearch debounce
+        source: function (request, response) {
+            response(fuzzyhound.search(request.term));
+        }
+    });
 
     //Get instance to extend
-    var jq_instance = jq_auto.autocomplete("instance");
+    var $inst = $el.autocomplete("instance");
 
     //Custom item
-    jq_instance._renderItem = function (ul, item) {
+    $inst._renderItem = function (ul, item) {
         return $("<li>").append(itemTemplate(item)).appendTo(ul);
     };
 
     //Custom footer
-    jq_instance._renderMenu = function (ul, items) {
+    $inst._renderMenu = function (ul, items) {
         var nbitems = items.length, i = -1;
         while (++i < nbitems) {
             var display = items[i].title;
-            this._renderItem(ul, items[i])
-                    .data("ui-autocomplete-item",
-                    {display: display, value: display});
+            this._renderItem(ul, items[i]).data("ui-autocomplete-item",{display: display, value: display});
         }
         $("<li>").append(footerTemplate()).data("ui-autocomplete-item", {display: "", value: ""}).appendTo(ul);
     };
@@ -252,15 +247,17 @@
     });
 
     $('#fused').change(function () {
-        var b = $(this).is(":checked");
+        fuzzyhound.setOptions({
+            score_test_fused: $(this).is(":checked")
+        });
+    });
+
+    $('#acro').change(function () {
 
         fuzzyhound.setOptions({
-            score_test_fused: b, //Score merged, can be changed for free at anytime
-            score_acronym:b, //Score acronym, changing this need to reprocess source
-            dirty: true     //Acronym building is done at source processing stage,
-                            // dirty flag reprocess the source.
+            score_acronym:$(this).is(":checked"),
+            dirty: true     //Acronym building is done at source processing stage so we need to reprocess the source.
         });
-
 
     })
 

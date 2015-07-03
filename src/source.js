@@ -31,10 +31,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             out_index = nb_items;
 
         var index = this.index;
-        var min_size = this.token_field_min_length;
-        var max_size = this.token_field_max_length;
-
-        var acronym = this.score_acronym;
+        var options = this.options;
+        var min_size = options.token_field_min_length;
+        var max_size = options.token_field_max_length;
+        var acronym = options.score_acronym;
         var acronym_re = this.acro_re;
 
         for (var item_index = -1; ++item_index < nb_items;) {
@@ -49,7 +49,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 var field = item_fields[field_index];
                 for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
 
-                    var norm = this.normalize(field[node_index]);
+                    var norm = options.normalize(field[node_index]);
                     var nodes = FuzzySearch.filterSize(norm.split(" "), min_size, max_size);
                     if (acronym) nodes.push(norm.replace(acronym_re, "$1"));
                     field[node_index] = nodes;
