@@ -19,6 +19,7 @@
     <script src="../src/Highlight.FS.js"></script>
     -->
 
+
 </head>
 <body>
 
@@ -74,15 +75,11 @@
 
         <h2>Options</h2>
 
-        <label> <input type="checkbox" name="free" id="free" checked /> Enable per token score </label><br>
-        <table style="text-align: left; display:block; width:90%; max-width:600px;vertical-align: top;margin: 0 auto auto;">
-            <tr><td><strong>Enable:</strong></td><td>Allow free word order, try to respect word boundary &amp;  match start of words, Different words can match different fields. Friendlier for complete sentences !</td></tr>
-            <tr><td><strong>Disable:</strong></td><td>Very fast ! Match whole query against whole field. All character in order, score best field for each item. If your dataset have one word per item, (or one word per field) this might be the best option for you</td></tr>
-        </table>
-
         <br><br>
-        <label> <input type="checkbox" name="fused" id="fused" /> Enable fused score </label><br>
-        (Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war")
+        <label> <input type="checkbox" name="fused" id="fused" /> Enable fused score & acronym </label><br>
+        <p> Test an extra possibility where both string matches without token boundary. eg "oldmanwar" matches "old man war",
+            also "jrrt" can match <b>J</b>ohn <b>R</b>onald <b>R</b>euel <b>T</b>olkien
+        </p>
 
 </form>
 
@@ -257,9 +254,16 @@
     });
 
     $('#fused').change(function () {
+        var b = $(this).is(":checked");
+
         fuzzyhound.setOptions({
-            score_test_fused: $(this).is(":checked")
+            score_test_fused: b, //Score merged, can be changed for free at anytime
+            score_acronym:b, //Score acronym, changing this need to reprocess source
+            dirty: true     //Acronym building is done at source processing stage,
+                            // dirty flag reprocess the source.
         });
+
+
     })
 
 

@@ -72,6 +72,7 @@
         var close_string = options.highlight_after;
         var opt_score_tok = options.score_per_token;
         var opt_fuse = options.score_test_fused;
+        var opt_acro = options.score_acronym;
 
         var aa = options.normalize(a).trim();
         var bb = options.normalize(b).trim();
@@ -89,7 +90,7 @@
         }
 
         //Test "space bar is broken" no token match
-        if (opt_fuse || !opt_score_tok) fused_score = FuzzySearch.score_map(aa, bb, FuzzySearch.alphabet(aa), options);
+        if (opt_fuse || !opt_score_tok || opt_acro) fused_score = FuzzySearch.score_map(aa, bb, FuzzySearch.alphabet(aa), options);
 
         if (match_score === 0 && fused_score === 0) return b; //shortcut no match
 
@@ -183,6 +184,9 @@
         var LEFT = 2;
         var DIAGONAL = 3;
 
+        var score_acronym = options.score_acronym;
+        var sep_tokens = options.acronym_tok;
+
         var m = Math.min(a.length + 1, options.token_query_max_length);
         var n = Math.min(b.length + 1, options.token_field_max_length);
 
@@ -212,7 +216,6 @@
         }
 
         var vmax = 0, imax = 0, jmax = 0;
-
         var trace = new Array(m * n);
         var pos = n - 1;
 
@@ -253,12 +256,21 @@
                     // Score the options
                     gapA = gapArow[j] = Math.max(gapArow[j] + we, vrow[j] + wo); //f
                     gapB = Math.max(gapB + we, vrow[j - 1] + wo); //e
-                    align = ( a[i - 1] === b[j - 1] ) ? vd + wm : -Infinity;
+
+                    if(score_acronym)
+                        align = ( a[i - 1] !== b[j - 1] ) ? -Infinity : (
+                            vd + wm +
+                            ( ( i<2 || sep_tokens.indexOf(a[i - 2]) > -1 )?wm:0) +
+                            ( ( j<2 || sep_tokens.indexOf(b[j - 2]) > -1 )?wm:0)
+                        );
+                    else
+                        align = ( a[i - 1] === b[j - 1] ) ? vd + wm : -Infinity;
+
                     vd = vrow[j];
 
                     v = vrow[j] = Math.max(align, gapA, gapB, 0);
 
-                    // Determine the traceback direction
+                    // Determine the trace back direction
                     pos++;  //pos = i * n + j;
                     switch (v) {
 
@@ -565,13 +577,13 @@
     // Given 5 node: 1,2,3,4,5
     //
     //  What is the best match ...
-    //    - knowing that we have passed thru 1->2->3
-    //    - knowing that we have passed thru 2->3->1
-    //    - knowing that we have passed thru 3->1->2
+    //    - knowing that we have passed tru 1->2->3
+    //    - knowing that we have passed tru 2->3->1
+    //    - knowing that we have passed tru 3->1->2
     //
     //  All those question have the same answer
-    //  because they are equivalent to match {4,5} againt {4,5}
-    // ( in an alternate pass we can match {1,3} againt {4,5} for example )
+    //  because they are equivalent to match {4,5} against {4,5}
+    // ( in an alternate pass we can match {1,3} against {4,5} for example )
     //
     // We store match in j in a bit vector of size 32
     //
@@ -580,7 +592,7 @@
     //
     // In addition of quick testing if an item is already used, used_mask serve
     // as a key in cache_tree (in addition to level). Ideal key would be a list of available trial
-    // but, used & available are complementary vector (~not operation) so used is a perfeclty valid key too...
+    // but, used & available are complementary vector (~not operation) so used is a perfectly valid key too...
 
 
     /**

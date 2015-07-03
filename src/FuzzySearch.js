@@ -51,6 +51,9 @@
         score_test_fused: false,          // Try one extra match where we disregard token separation.
                                           // "oldman" match "old man"
 
+        score_acronym: false,             // jrrt match against John Ronald Reuel Tolkien
+        acronym_tok: " .,-:",
+
         //
         //  Output sort & transform
         //
@@ -60,7 +63,7 @@
 
         sorter: compareResults,          // Function used to sort. See signature of Array.sort(sorter)
         normalize: normalize,            // Function used to transform string (lowercase, accents, etc)
-        filter:null,                     // Select elements to be searched. (done before each search)
+        filter: null,                     // Select elements to be searched. (done before each search)
 
         /**@type {string|function({SearchResult})}*/
         output_map: "item",              // Transform the output, can be a function or a path string.
@@ -86,7 +89,7 @@
 
         //Do not attempt to match token too different in size: n/m = len(field_tok)/len(query_tok)
         token_min_rel_size: 0.6,         // Field token should contain query token. Reject field token that are too small.
-        token_max_rel_size: 6,           // Large field token tend to match against everything. Ensure query is long enough to be specific.
+        token_max_rel_size: 10,           // Large field token tend to match against everything. Ensure query is long enough to be specific.
 
 
         //
@@ -105,7 +108,9 @@
 
         source: [],
         keys: [],
-        dirty: false // set to true to request a new lazy index pass. (index recomputed only on next search)
+        dirty: false, // when true, schedule a source refresh using new or existing source & keys, used once then clear itself.
+        lazy: false  // when true, any refresh happens only when a user make a search, option stay put until changed.
+
 
     };
 
@@ -113,7 +118,8 @@
     /** @lends {FuzzySearch.prototype} */{
         tags: [],     // alternative name for each key, support ouput alias and per key search
         index: [],    // source is processed using keys, then stored here
-        tags_re:null,
+        tags_re: null,
+        acro_re: null,
 
         //Information on last search
         query: null,
@@ -173,7 +179,7 @@
 
     };
 
-    function extend(a,b){
+    function extend(a, b) {
         for (var key in b) if (b.hasOwnProperty(key)) a[key] = b[key];
     }
 
@@ -184,10 +190,10 @@
         /**
          * Perform a search on the already indexed source.
          *
-         * @param {string} querystring
+         * @param {string} query_string
          * @returns {Array}
          */
-        search: function (querystring) {
+        search: function (query_string) {
 
             var clock = (window.performance && window.performance.now) ? window.performance : Date;
             var time_start = clock.now();
@@ -198,12 +204,12 @@
                 this.dirty = false;
             }
 
-            var query = this.query = this._prepQuery(querystring);
+            var query = this.query = this._prepQuery(query_string);
             var source = this.index;
             var results = [];
 
-            if(this.filter){
-                source = this.filter.call(this,source);
+            if (this.filter) {
+                source = this.filter.call(this, source);
             }
 
             // ---- MAIN SEARCH LOOP ---- //
@@ -255,7 +261,7 @@
             var thresh_include = this.thresh_include;
             var best_item_score = 0;
 
-            var sub_query  = query.children;
+            var sub_query = query.children;
 
             for (var item_index = -1, nb_items = source.length; ++item_index < nb_items;) {
 
@@ -289,7 +295,7 @@
 
                         if (opt_score_tok) {
                             node_score = this._scoreField(node, query);
-                            if(tagged) node_score += this._scoreField(node, child_query);//tag search
+                            if (tagged) node_score += this._scoreField(node, child_query);//tag search
                         }
                         else
                             node_score = FuzzySearch.score_map(query.fused_str, node.join(" "), query.fused_map, this);
@@ -371,7 +377,7 @@
 
             var groups = query.tokens_groups;
             var nb_groups = groups.length;
-            if(!nb_groups) return 0;
+            if (!nb_groups) return 0;
 
             var nb_tokens = field_tokens.length;
             var field_score = 0, sc;
@@ -434,7 +440,7 @@
                     // only consider non empty match for bonus
                     if (sc > minimum_match) {
                         var tmp = best_index[i];
-                        if (tmp > last_index){
+                        if (tmp > last_index) {
                             field_score += bonus_order;
                             sc += bonus_order
                         }
@@ -500,7 +506,7 @@
 
             // Input stage, work to allow different syntax for keys definition is done here.
             var oKeys;
-            if ( ("keys" in options) && ( ( oKeys = options.keys) !== undefined) ) {
+            if (("keys" in options) && ( ( oKeys = options.keys) !== undefined)) {
 
                 var key_type = Object.prototype.toString.call(oKeys);
                 var key_index, nb_keys;
@@ -526,8 +532,9 @@
 
                 }
 
-                oKeys = this.keys; nb_keys=oKeys.length;
-                for(key_index=-1;++key_index<nb_keys;){
+                oKeys = this.keys;
+                nb_keys = oKeys.length;
+                for (key_index = -1; ++key_index < nb_keys;) {
                     oKeys[key_index] = removePrefix(oKeys[key_index], ["item", "."])
                 }
 
@@ -536,27 +543,41 @@
 
             }
 
+            if (this.acro_re == null || "acronym_tok" in options) {
+                this.acro_re = this._buildAcronymRE(this.acronym_tok);
+            }
+
             // Build cache
-            if (("source" in options) || ("keys" in options)) {
-                this._prepSource(this.source, this.keys, true);
-                this.dirty = false;
+            if (this.dirty || ("source" in options) || ("keys" in options)) {
+                if (this.lazy) this.dirty = true; //Schedule later.
+                else {
+                    this._prepSource(this.source, this.keys, true);
+                    this.dirty = false;
+                }
             }
 
         },
 
-        _buildTagsRE:function(tags){
+        _buildTagsRE: function (tags) {
 
             var n = tags.length;
-            if(!n) return null;
+            if (!n) return null;
 
-            // Build regexp for tagged search
-            var re_escape = /[\-\[\]\/\{}\(\)\*\+\?\.\\\^\$\|]/g;
-            var tag_str = tags[0].replace(re_escape, "\\$&");
+            var tag_str = re_escape(tags[0]);
             for (var i = 0; ++i < n;) {
-                tag_str += "|" + tags[i].replace(re_escape, "\\$&");
+                tag_str += "|" + re_escape(tags[i]);
             }
 
-            return  new RegExp("(?:^|\\s)\\s*(" + tag_str + "):\\s*", "g");
+            return new RegExp("(?:^|\\s)\\s*(" + tag_str + "):\\s*", "g");
+
+        },
+
+        _buildAcronymRE: function (sep) {
+
+            var n = sep.length;
+            if (!n) return null;
+            var acro_str = re_escape(sep);
+            return new RegExp("(?:^|[" + acro_str + "])+([^" + acro_str + "])[^" + acro_str + "]*", "g");
 
         },
 
@@ -594,6 +615,9 @@
             var min_size = this.token_field_min_length;
             var max_size = this.token_field_max_length;
 
+            var acronym = this.score_acronym;
+            var acronym_re = this.acro_re;
+
             for (var item_index = -1; ++item_index < nb_items;) {
 
                 var item = source[item_index];
@@ -605,7 +629,12 @@
 
                     var field = item_fields[field_index];
                     for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
-                        field[node_index] = FuzzySearch.filterSize(this.normalize(field[node_index]).split(" "), min_size, max_size);
+
+                        var norm = this.normalize(field[node_index]);
+                        var nodes = FuzzySearch.filterSize(norm.split(" "), min_size, max_size);
+                        if (acronym) nodes.push(norm.replace(acronym_re, "$1"));
+                        field[node_index] = nodes;
+
                     }
 
                 }
@@ -653,22 +682,22 @@
             var tags_re = this.tags_re;
             var nb_tags = tags.length;
 
-            var norm,fused,fused_map,children,has_tags, group;
+            var norm, fused, fused_map, children, has_tags, group;
 
-            if( opt_tok && nb_tags && tags_re ){
+            if (opt_tok && nb_tags && tags_re) {
 
                 var start = 0, end;
                 var q_index = 0;
-                var q_parts = new Array(nb_tags+1);
+                var q_parts = new Array(nb_tags + 1);
 
-                var match =  tags_re.exec(querystring);
+                var match = tags_re.exec(querystring);
                 has_tags = (match != null);
 
                 while (match != null) {
                     end = match.index;
-                    q_parts[q_index] = querystring.substring(start,end);
+                    q_parts[q_index] = querystring.substring(start, end);
                     start = end + match[0].length;
-                    q_index = tags.indexOf(match[1])+1;
+                    q_index = tags.indexOf(match[1]) + 1;
                     match = tags_re.exec(querystring);
                 }
 
@@ -676,17 +705,17 @@
 
                 children = new Array(nb_tags);
 
-                for(var i=-1; ++i<nb_tags; ){
+                for (var i = -1; ++i < nb_tags;) {
 
-                    var qp  = q_parts[i+1];
-                    if(!qp || !qp.length) continue;
+                    var qp = q_parts[i + 1];
+                    if (!qp || !qp.length) continue;
 
-                    norm = this.normalize( qp );
+                    norm = this.normalize(qp);
                     fused = norm.substring(0, opt_fuselen);
-                    fused_map = (opt_fuse||!opt_tok) ? FuzzySearch.alphabet(fused) : {};
-                    group = FuzzySearch.pack_tokens(FuzzySearch.filterSize( norm.split(" "), opt_qmin, opt_qmax));
+                    fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
+                    group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
 
-                    children[i] = new Query(norm,group,fused,fused_map,false,[]);
+                    children[i] = new Query(norm, group, fused, fused_map, false, []);
                 }
 
 
@@ -695,17 +724,17 @@
 
             }
 
-            else{
+            else {
                 norm = this.normalize(querystring);
-                group = opt_tok?FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), this.token_query_min_length, this.token_query_max_length)):[];
+                group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), this.token_query_min_length, this.token_query_max_length)) : [];
                 has_tags = false;
                 children = new Array(nb_tags);
             }
 
             fused = norm.substring(0, opt_fuselen);
-            fused_map = (opt_fuse||!opt_tok) ? FuzzySearch.alphabet(fused) : {};
+            fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
 
-            return new Query(norm, group, fused, fused_map, has_tags,  children)
+            return new Query(norm, group, fused, fused_map, has_tags, children)
 
         },
 
@@ -861,7 +890,6 @@
         }
 
 
-
     });
 
     //
@@ -895,7 +923,7 @@
 
     }
 
-    Query.prototype.resetItem = function(){
+    Query.prototype.resetItem = function () {
         var groups = this.tokens_groups;
 
         for (var group_index = -1, nb_groups = groups.length; ++group_index < nb_groups;) {
@@ -906,17 +934,17 @@
 
         this.fused_score = 0;
 
-        if(this.has_children){
+        if (this.has_children) {
             var children = this.children;
-            for (var child_index = -1, nb_child = children.length; ++child_index < nb_child;){
+            for (var child_index = -1, nb_child = children.length; ++child_index < nb_child;) {
                 var child = children[child_index];
-                if(child) child.resetItem();
+                if (child) child.resetItem();
             }
         }
 
     };
 
-    Query.prototype.scoreItem = function(){
+    Query.prototype.scoreItem = function () {
 
         var query_score = 0;
         var groups = this.tokens_groups;
@@ -930,11 +958,11 @@
 
         if (this.fused_score > query_score) query_score = this.fused_score;
 
-        if(this.has_children){
+        if (this.has_children) {
             var children = this.children;
-            for (var child_index = -1, nb_child = children.length; ++child_index < nb_child;){
+            for (var child_index = -1, nb_child = children.length; ++child_index < nb_child;) {
                 var child = children[child_index];
-                if(child) query_score += child.scoreItem();
+                if (child) query_score += child.scoreItem();
             }
         }
 
@@ -1042,7 +1070,6 @@
         return (offset > 0) ? str.substr(offset) : str;
     }
 
-
     // - - - - - - - - - - - - - - - - - - - - - -
     //   Input stage: prepare field for search
     //- - - - - - - - - - - - - - - - - - - - - -
@@ -1062,7 +1089,7 @@
         });
     }
 
-    function getDiacriticsMap(){
+    function getDiacriticsMap() {
         // replace most common accents in french-spanish by their base letter
         //"ãàáäâæẽèéëêìíïîõòóöôœùúüûñç"
         var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
@@ -1076,6 +1103,11 @@
 
     var diacriticsMap = getDiacriticsMap();
 
+    // Build regexp for tagged search
+    function re_escape(str) {
+        var re = /[\-\[\]\/\{}\(\)\*\+\?\.\\\^\$\|]/g;
+        return str.replace(re, "\\$&");
+    }
 
     /**
      * Given an object to index and a list of field to index
@@ -1571,7 +1603,7 @@
         var ZM = packinfo.gate | 0;
         var aMap = packinfo.map;
 
-        for (var j = -1, n = field_token.length;++j < n;) {
+        for (var j = -1, n = field_token.length; ++j < n;) {
             c = field_token[j];
             if (c in aMap) {
                 U = S & aMap[c];
@@ -1587,7 +1619,7 @@
         var scores = new Array(nb_packed);
         var offset = 0;
 
-        for (var k = -1;++k < nb_packed;) {
+        for (var k = -1; ++k < nb_packed;) {
 
             var query_tok = packed_tokens[k];
             var m = query_tok.length;
@@ -1701,7 +1733,7 @@
             // the number of if block can only increase up to llcs+1+sentinel
             // alternatively each block having >1 item can split. (+1 at end accounted by splitting sentinel)
             /** @type Array.<Block> */
-            var current_line = new Array( Math.min( 2*nb_blocks , lcs_len+2) );
+            var current_line = new Array(Math.min(2 * nb_blocks, lcs_len + 2));
             line_index = -1;
 
             //First match
