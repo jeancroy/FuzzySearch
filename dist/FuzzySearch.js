@@ -221,15 +221,15 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         //We still test "optioname in option" to know if we have received something new
         //This allow to support "shorthand" options and is used to refresh data.
 
-        var selfopt = this.options;
+        var self_options = this.options;
 
         //Output stage
         if ("output_map" in options && typeof options.output_map === "string") {
-            if (selfopt.output_map === "alias") selfopt.output_map = this.aliasResult;
-            else selfopt.output_map = removePrefix(selfopt.output_map, ["root", "."]);
+            if (self_options.output_map === "alias") self_options.output_map = this.aliasResult;
+            else self_options.output_map = removePrefix(self_options.output_map, ["root", "."]);
         }
 
-        this.source = selfopt.source;
+        this.source = self_options.source;
 
         // Input stage, work to allow different syntax for keys definition is done here.
         var oKeys;
@@ -274,14 +274,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         }
 
-        if (this.acro_re == null || "acronym_tok" in options) {
-            this.acro_re = buildAcronymRE(selfopt.acronym_tok);
+        if (this.acro_re === null || "acronym_tok" in options) {
+            this.acro_re = buildAcronymRE(self_options.acronym_tok);
         }
 
 
         // Build cache
         if ( options.dirty || ("source" in options) || ("keys" in options)) {
-            if (selfopt.lazy) this.dirty = true; //Schedule later.
+            if (self_options.lazy) this.dirty = true; //Schedule later.
             else {
                 this._prepSource(this.source, this.keys, true);
                 this.dirty = false;
@@ -583,9 +583,9 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             var q_parts = new Array(nb_tags + 1);
 
             var match = tags_re.exec(query_string);
-            has_tags = (match != null);
+            has_tags = (match !== null);
 
-            while (match != null) {
+            while (match !== null) {
                 end = match.index;
                 q_parts[q_index] = query_string.substring(start, end);
                 start = end + match[0].length;
@@ -950,7 +950,7 @@ FuzzySearch.score_map = function (a, b, aMap, options) {
     var bonus_prefix = options.bonus_match_start;
 
     var k = m < n ? m : n;
-    if (k === 0 || n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
+    if (k === 0) return 0;
 
     //normalize score against length of both inputs
     var sz_score = (m + n) / ( 2.0 * m * n);
@@ -1003,6 +1003,23 @@ FuzzySearch.score_map = function (a, b, aMap, options) {
     lcs_len += prefix;
     return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
 
+};
+
+/**
+ * Call score_map on the first token.
+ * Filter size
+ *
+ * @param {PackInfo} packinfo
+ * @param {string} token
+ * @param {FuzzySearchOptions} options
+ * @return {number} score
+ */
+FuzzySearch.score_single = function(packinfo, token, options){
+    var field_tok = packinfo.tokens[0];
+    var m = field_tok.length;
+    var n = token.length;
+    if( n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
+    return FuzzySearch.score_map(field_tok, token, packinfo.map, options)
 };
 
 /**
@@ -1504,9 +1521,9 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         var groups = query.tokens_groups;
         var nb_groups = groups.length;
-        if (!nb_groups) return 0;
-
         var nb_tokens = field_tokens.length;
+        if (!nb_groups || !nb_tokens) return 0;
+
         var field_score = 0, sc;
         var last_index = -1;
         var options = this.options;
@@ -1518,12 +1535,12 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         for (var group_index = -1; ++group_index < nb_groups;) {
 
             var group_info = groups[group_index];
-            var group_tokens = group_info.tokens;
-            var nb_scores = group_tokens.length;
+            var nb_scores = group_info.tokens.length;
             var single = (nb_scores == 1);
 
-            //each packinfo/group have their own reusable scratch pad
-            // to store best score information, how neat :)
+            // Each packinfo have their own reusable scratch pad
+            // to store best score information, reset them to 0
+
             var best_of_field = group_info.score_field;
             for (i = -1; ++i < nb_scores;) best_of_field[i] = 0
 
@@ -1536,7 +1553,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
                 if (single) {
 
-                    sc = FuzzySearch.score_map(group_tokens[0], token, group_info.map, options);
+                    sc = FuzzySearch.score_single(group_info, token, options);
                     if (sc > best_of_field[0]) {
                         best_of_field[0] = sc;
                         best_index[0] = field_tk_index;
@@ -1564,15 +1581,15 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 sc = best_of_field[i];
                 field_score += sc;
 
-                // if search token are ordered inside subject give a bonus
-                // only consider non empty match for bonus
+                // Give bonus for pair in consecutive order
+                // Only consider positive match for bonus
                 if (sc > minimum_match) {
-                    var tmp = best_index[i];
-                    if (tmp > last_index) {
+                    var this_index = best_index[i];
+                    if (this_index > last_index) {
                         field_score += bonus_order;
                         sc += bonus_order
                     }
-                    last_index = tmp;
+                    last_index = this_index;
                 }
 
                 if (sc > best_match_this_item[i])
@@ -1584,8 +1601,16 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         }
 
         if (options.score_test_fused) {
+
+            // field_tokens.join(" "), remove last one if acronym
+            // performance of array.join(" ") and str concat look similar on modern browser.
+
+            var n = (options.score_acronym)?nb_tokens-1:nb_tokens;
+            var fused_field = field_tokens[0], fi = 0;
+            while(++fi<n) fused_field += " "+field_tokens[fi];
+
             // test "space bar is broken" no token match
-            var fused_score = FuzzySearch.score_map(query.fused_str, field_tokens.join(" "), query.fused_map, options);
+            var fused_score = FuzzySearch.score_map(query.fused_str, fused_field, query.fused_map, options);
             field_score = fused_score > field_score ? fused_score : field_score;
 
             if (fused_score > query.fused_score) {
@@ -1653,7 +1678,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
 
                     var norm = options.normalize(field[node_index]);
-                    var nodes = FuzzySearch.filterSize(norm.split(" "), min_size, max_size);
+                    var nodes = norm.split(" ");
+                    //Filter size. (If total field length is very small, make an exception.
+                    // Eg some movie/Book have a single letter title, filter risk of removing everything )
+                    if(norm.length > 2*min_size) nodes = FuzzySearch.filterSize(nodes, min_size, max_size);
                     if (acronym) nodes.push(norm.replace(acronym_re, "$1"));
                     field[node_index] = nodes;
 
@@ -1887,7 +1915,8 @@ FuzzySearch.highlight = function (a, b, options) {
     var fused_score = 0, match_score = 0;
 
     if (opt_score_tok) {
-        match_score = FuzzySearch.matchTokens(a_tokens, b_tokens, match_list, options, true);
+        //Reverse a,b because we want to map each token of b to a search term
+        match_score = FuzzySearch.matchTokens(b_tokens, a_tokens , match_list, options, false);
     }
 
     //Test "space bar is broken" no token match

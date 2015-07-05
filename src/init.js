@@ -209,15 +209,15 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         //We still test "optioname in option" to know if we have received something new
         //This allow to support "shorthand" options and is used to refresh data.
 
-        var selfopt = this.options;
+        var self_options = this.options;
 
         //Output stage
         if ("output_map" in options && typeof options.output_map === "string") {
-            if (selfopt.output_map === "alias") selfopt.output_map = this.aliasResult;
-            else selfopt.output_map = removePrefix(selfopt.output_map, ["root", "."]);
+            if (self_options.output_map === "alias") self_options.output_map = this.aliasResult;
+            else self_options.output_map = removePrefix(self_options.output_map, ["root", "."]);
         }
 
-        this.source = selfopt.source;
+        this.source = self_options.source;
 
         // Input stage, work to allow different syntax for keys definition is done here.
         var oKeys;
@@ -262,14 +262,14 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         }
 
-        if (this.acro_re == null || "acronym_tok" in options) {
-            this.acro_re = buildAcronymRE(selfopt.acronym_tok);
+        if (this.acro_re === null || "acronym_tok" in options) {
+            this.acro_re = buildAcronymRE(self_options.acronym_tok);
         }
 
 
         // Build cache
         if ( options.dirty || ("source" in options) || ("keys" in options)) {
-            if (selfopt.lazy) this.dirty = true; //Schedule later.
+            if (self_options.lazy) this.dirty = true; //Schedule later.
             else {
                 this._prepSource(this.source, this.keys, true);
                 this.dirty = false;

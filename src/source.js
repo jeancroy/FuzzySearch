@@ -50,7 +50,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
 
                     var norm = options.normalize(field[node_index]);
-                    var nodes = FuzzySearch.filterSize(norm.split(" "), min_size, max_size);
+                    var nodes = norm.split(" ");
+                    //Filter size. (If total field length is very small, make an exception.
+                    // Eg some movie/Book have a single letter title, filter risk of removing everything )
+                    if (norm.length > 2 * min_size) nodes = FuzzySearch.filterSize(nodes, min_size, max_size);
                     if (acronym) nodes.push(norm.replace(acronym_re, "$1"));
                     field[node_index] = nodes;
 

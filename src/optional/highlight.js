@@ -62,7 +62,8 @@ FuzzySearch.highlight = function (a, b, options) {
     var fused_score = 0, match_score = 0;
 
     if (opt_score_tok) {
-        match_score = FuzzySearch.matchTokens(a_tokens, b_tokens, match_list, options, true);
+        //Reverse a,b because we want to map each token of b to a search term
+        match_score = FuzzySearch.matchTokens(b_tokens, a_tokens, match_list, options, false);
     }
 
     //Test "space bar is broken" no token match

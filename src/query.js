@@ -46,9 +46,9 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             var q_parts = new Array(nb_tags + 1);
 
             var match = tags_re.exec(query_string);
-            has_tags = (match != null);
+            has_tags = (match !== null);
 
-            while (match != null) {
+            while (match !== null) {
                 end = match.index;
                 q_parts[q_index] = query_string.substring(start, end);
                 start = end + match[0].length;

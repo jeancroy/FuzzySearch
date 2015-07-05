@@ -41,7 +41,7 @@ FuzzySearch.score_map = function (a, b, aMap, options) {
     var bonus_prefix = options.bonus_match_start;
 
     var k = m < n ? m : n;
-    if (k === 0 || n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
+    if (k === 0) return 0;
 
     //normalize score against length of both inputs
     var sz_score = (m + n) / ( 2.0 * m * n);
@@ -94,6 +94,23 @@ FuzzySearch.score_map = function (a, b, aMap, options) {
     lcs_len += prefix;
     return sz_score * lcs_len * lcs_len + bonus_prefix * prefix;
 
+};
+
+/**
+ * Call score_map on the first token.
+ * Filter size
+ *
+ * @param {PackInfo} packinfo
+ * @param {string} token
+ * @param {FuzzySearchOptions} options
+ * @return {number} score
+ */
+FuzzySearch.score_single = function (packinfo, token, options) {
+    var field_tok = packinfo.tokens[0];
+    var m = field_tok.length;
+    var n = token.length;
+    if (n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
+    return FuzzySearch.score_map(field_tok, token, packinfo.map, options)
 };
 
 /**
