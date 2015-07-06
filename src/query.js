@@ -36,6 +36,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var tags = this.tags;
         var tags_re = this.tags_re;
         var nb_tags = tags.length;
+        var token_re = this.token_re;
 
         var norm, fused, fused_map, children, has_tags, group;
 
@@ -68,20 +69,20 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 norm = options.normalize(qp);
                 fused = norm.substring(0, opt_fuselen);
                 fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
-                group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
+                group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax));
 
                 children[i] = new Query(norm, group, fused, fused_map, false, []);
             }
 
 
             norm = options.normalize(q_parts[0]);
-            group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), opt_qmin, opt_qmax));
+            group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax));
 
         }
 
         else {
             norm = options.normalize(query_string);
-            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(" "), options.token_query_min_length, options.token_query_max_length)) : [];
+            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax)) : [];
             has_tags = false;
             children = new Array(nb_tags);
         }

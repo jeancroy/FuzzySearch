@@ -1,5 +1,6 @@
 // main entry of the algorithm (once settings are set)
 // loop over everything and merge best scores
+'use strict';
 
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
@@ -199,7 +200,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var nb_tokens = field_tokens.length;
         if (!nb_groups || !nb_tokens) return 0;
 
-        var field_score = 0, sc;
+        var field_score = 0, sc, bf;
         var last_index = -1;
         var options = this.options;
 
@@ -211,7 +212,6 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
             var group_info = groups[group_index];
             var nb_scores = group_info.tokens.length;
-            var single = (nb_scores == 1);
 
             // Each packinfo have their own reusable scratch pad
             // to store best score information, reset them to 0
@@ -225,25 +225,16 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             for (var field_tk_index = -1; ++field_tk_index < nb_tokens;) {
 
                 token = field_tokens[field_tk_index];
+                scores = FuzzySearch.score_pack(group_info, token, options);
+                for (i = -1; ++i < nb_scores;) {
+                    sc = scores[i];
+                    bf = best_of_field[i];
+                    //Score is an improvement OR
+                    //Score is within a token order bonus from being better, but word are swapped
 
-                if (single) {
-
-                    sc = FuzzySearch.score_single(group_info, token, options);
-                    if (sc > best_of_field[0]) {
-                        best_of_field[0] = sc;
-                        best_index[0] = field_tk_index;
-                    }
-
-                }
-                else {
-
-                    scores = FuzzySearch.score_pack(group_info, token, options);
-                    for (i = -1; ++i < nb_scores;) {
-                        sc = scores[i];
-                        if (sc > best_of_field[i]) {
-                            best_of_field[i] = sc;
-                            best_index[i] = field_tk_index;
-                        }
+                    if (sc > bf || ( bf - sc < bonus_order && i > 0 && best_index[i] <= best_index[i - 1] )) {
+                        best_of_field[i] = sc;
+                        best_index[i] = field_tk_index;
                     }
 
                 }
@@ -256,14 +247,19 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 sc = best_of_field[i];
                 field_score += sc;
 
+
                 // Give bonus for pair in consecutive order
                 // Only consider positive match for bonus
                 if (sc > minimum_match) {
                     var this_index = best_index[i];
-                    if (this_index > last_index) {
-                        field_score += bonus_order;
-                        sc += bonus_order
-                    }
+
+                    //Bonus is diluted by the distance between words.
+                    //Positive match, but out of order get half the bonus.
+                    var d = this_index - last_index;
+                    var bo = bonus_order * ( 1.0 / (1.0 + Math.abs(d)));
+                    if (d > 0) bo *= 2;
+                    field_score += bo;
+                    sc += bo;
                     last_index = this_index;
                 }
 
@@ -286,6 +282,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
             // test "space bar is broken" no token match
             var fused_score = FuzzySearch.score_map(query.fused_str, fused_field, query.fused_map, options);
+            fused_score += bonus_order; //fused cannot be out of order
             field_score = fused_score > field_score ? fused_score : field_score;
 
             if (fused_score > query.fused_score) {
