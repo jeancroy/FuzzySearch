@@ -2,6 +2,7 @@
  * @param options
  * @constructor
  */
+'use strict';
 
 function FuzzySearch(options) {
 
@@ -34,6 +35,7 @@ FuzzySearch.defaultOptions =
     score_per_token: true,            // if true, split query&field in token, allow to match in different order
                                       // if false, bypass at least half the computation cost, very fast
                                       // also disable different token that score different field, because no more token!!
+    token_split: /\s+/g,
 
     score_test_fused: false,          // Try one extra match where we disregard token separation.
                                       // "oldman" match "old man"
@@ -107,9 +109,10 @@ var _privates =
     index: [],    // source is processed using keys, then stored here
     tags_re: null,
     acro_re: null,
+    token_re: null,
 
     /**@type {FuzzySearchOptions}*/
-    options:null,
+    options: null,
     dirty: false, // when true, schedule a source refresh using new or existing source & keys, used once then clear itself.
 
     //Information on last search
@@ -127,7 +130,7 @@ var _privates =
  */
 var INT_SIZE = 32;
 
-function FuzzySearchOptions(defaults,options){
+function FuzzySearchOptions(defaults, options) {
     for (var key in defaults) {
         if (defaults.hasOwnProperty(key)) { //fill self with value from either options or default
             this[key] = (options.hasOwnProperty(key) && options[key] !== undefined ) ? options[key] : defaults[key];
@@ -135,7 +138,7 @@ function FuzzySearchOptions(defaults,options){
     }
 }
 
-FuzzySearchOptions.update = function(self, defaults,options){
+FuzzySearchOptions.update = function (self, defaults, options) {
     for (var key in options) {
         if (options.hasOwnProperty(key) && defaults.hasOwnProperty(key)) {
             //explicitly set a options to undefined => reset default, else get value
@@ -159,10 +162,10 @@ FuzzySearchOptions.update = function(self, defaults,options){
 FuzzySearch.setOptions = function (self, options, defaults, privates, reset, hook) {
 
     if (reset) {
-        extend(self,privates);
-        self.options = new FuzzySearchOptions(defaults,options);
+        extend(self, privates);
+        self.options = new FuzzySearchOptions(defaults, options);
     } else {
-        FuzzySearchOptions.update(self.options,defaults, options);
+        FuzzySearchOptions.update(self.options, defaults, options);
     }
 
     hook.call(self, options)
@@ -247,7 +250,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
             }
 
-            else{
+            else {
                 this.keys = oKeys;
             }
 
@@ -266,9 +269,12 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             this.acro_re = buildAcronymRE(self_options.acronym_tok);
         }
 
+        if (this.token_re === null || "token_split" in options) {
+            this.token_re = self_options.token_split;
+        }
 
         // Build cache
-        if ( options.dirty || ("source" in options) || ("keys" in options)) {
+        if (options.dirty || ("source" in options) || ("keys" in options)) {
             if (self_options.lazy) this.dirty = true; //Schedule later.
             else {
                 this._prepSource(this.source, this.keys, true);

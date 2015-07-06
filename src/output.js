@@ -3,6 +3,7 @@
 //  OUTPUT OR POST PROCESS
 // - - - - - - - - - - - -
 //
+'use strict';
 
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 

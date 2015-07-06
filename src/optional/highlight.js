@@ -1,23 +1,17 @@
-/** @lends {FuzzySearchOptions.prototype} */
-var highlightOptions = {
+//
+// Extend base option to support highlight
+//
+'use strict';
+
+extend(FuzzySearch.defaultOptions, /** @lends {FuzzySearchOptions.prototype} */{
 
     highlight_prefix: false,         // true: force prefix as part of highlight, (false: minimum gap, slower)
     highlight_bridge_gap: 2,         // display small gap as substitution, set to size of gap, 0 to disable
     highlight_before: '<strong class="highlight">',  //tag to put before/after the highlight
     highlight_after: '</strong>'
 
-};
+});
 
-//
-// Extend base option to support highlight
-//
-var defaults = FuzzySearch.defaultOptions;
-
-for (var key in highlightOptions) {
-    if (highlightOptions.hasOwnProperty(key)) {
-        defaults[key] = highlightOptions[key];
-    }
-}
 
 /**
  * Highlight a string using query stored in a FuzzySearch object.
@@ -49,25 +43,32 @@ FuzzySearch.highlight = function (a, b, options) {
     var opt_score_tok = options.score_per_token;
     var opt_fuse = options.score_test_fused;
     var opt_acro = options.score_acronym;
+    var token_re = options.token_split;
 
-    var aa = options.normalize(a).trim();
-    var bb = options.normalize(b).trim();
+    var aa = options.normalize(a);
+    var bb = options.normalize(b);
 
-    var a_tokens = aa.split(" ");
-    var b_tokens = bb.split(" ");
-    var disp_tokens = b.split(/\s+/);
+    //Normalized needle
+    var a_tokens = aa.split(token_re);
+
+    //Normalized haystack
+    var b_tokens = bb.split(token_re);
+
+    //Original spelling haystack
+    var disp_tokens = [], disp_sep = [];
+    splitKeepSep(b, token_re, disp_tokens, disp_sep);
+
 
     var strArr = [];
     var match_list = [];
     var fused_score = 0, match_score = 0;
 
     if (opt_score_tok) {
-        //Reverse a,b because we want to map each token of b to a search term
         match_score = FuzzySearch.matchTokens(b_tokens, a_tokens, match_list, options, false);
     }
 
     //Test "space bar is broken" no token match
-    if (opt_fuse || !opt_score_tok || opt_acro) fused_score = FuzzySearch.score_map(aa, bb, FuzzySearch.alphabet(aa), options);
+    if (opt_fuse || !opt_score_tok || opt_acro) fused_score = FuzzySearch.score_map(aa, bb, FuzzySearch.alphabet(aa), options) + options.bonus_token_order;
 
     if (match_score === 0 && fused_score === 0) return b; //shortcut no match
 
@@ -75,7 +76,7 @@ FuzzySearch.highlight = function (a, b, options) {
     if (!opt_score_tok || fused_score > match_score) {
         a_tokens = [aa]; //everything in a single token
         b_tokens = [bb];
-        disp_tokens = [disp_tokens.join(" ")];
+        disp_tokens = [b];
         match_list = [0];
     }
 
@@ -85,7 +86,7 @@ FuzzySearch.highlight = function (a, b, options) {
         var i = match_list[j];
 
         if (i === -1) {
-            strArr.push(disp_tokens[j] + " ");
+            strArr.push(disp_tokens[j] + disp_sep[j]);
             continue;
         }
 
@@ -110,13 +111,42 @@ FuzzySearch.highlight = function (a, b, options) {
 
         }
 
-        strArr.push(td.substring(curr) + " ");
+        strArr.push(td.substring(curr) + disp_sep[j]);
 
     }
 
     return strArr.join('');
 
 };
+
+
+function splitKeepSep(str, pattern, tokens, seps) {
+
+    var tok_index = tokens.length;
+
+    var match = pattern.exec(str);
+    if (match === null) {
+        tokens[tok_index] = str;
+        seps[tok_index] = "";
+        return;
+    }
+
+    var start = 0, end, len;
+    while (match !== null) {
+        end = match.index;
+        len = match[0].length;
+        tokens[tok_index] = str.substring(start, end);
+        seps[tok_index] = str.substr(end, len);
+        start = end + len;
+        tok_index++;
+        match = pattern.exec(str);
+    }
+
+    tokens[tok_index] = str.substring(start);
+    seps[tok_index] = "";
+
+
+}
 
 
 //
@@ -209,6 +239,10 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
             trace[j] = STOP;
         }
 
+        //DEBUG
+        //var DEBUG_V = [];
+        //var DEBUG_TR = [];
+
         for (i = 1; i < m; i++) {
 
             gapB = 0;
@@ -216,6 +250,10 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 
             pos++;
             trace[pos] = STOP;
+
+            //DEBUG
+            //DEBUG_V[i] = [];
+            //DEBUG_TR[i] = [];
 
             for (j = 1; j < n; j++) {
 
@@ -247,11 +285,18 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 
                 v = vrow[j] = Math.max(align, gapA, gapB, 0);
 
+                //DEBUG
+                //DEBUG_V[i][j] = v;
+
                 // Determine the trace back direction
                 pos++;  //pos = i * n + j;
                 switch (v) {
 
                     // what triggered the best score ?
+                    //In case of equality, taking gapB get us closer to the start of the string.
+                    case gapB:
+                        trace[pos] = LEFT;
+                        break;
 
                     case align:
                         trace[pos] = DIAGONAL;
@@ -264,9 +309,6 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 
                         break;
 
-                    case gapB:
-                        trace[pos] = LEFT;
-                        break;
 
                     case gapA:
                         trace[pos] = UP;
@@ -278,12 +320,19 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 
                 }
 
+                //DEBUG
+                //DEBUG_TR[i][j] = trace[pos];
 
             }
         }
 
 
     }
+
+    //DEBUG
+    //console.table(DEBUG_V);
+    //console.table(DEBUG_TR);
+
 
     // - - - - - - - - -
     //     TRACEBACK
@@ -423,7 +472,7 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
 FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options, flip) {
 
     if (options === undefined) options = FuzzySearch.defaultOptions;
-    if (flip == undefined) flip = false;
+    if (flip === undefined) flip = false;
 
     var minimum_match = options.minimum_match;
     var best_thresh = options.thresh_relative_to_best;
@@ -451,6 +500,7 @@ FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options, flip) {
         if (!a_tok.length) {
             //skip score loop but still fill array
             for (j = 0; j < n; j++) row[j] = 0;
+            C[i] = row;
             continue;
         }
 
@@ -499,7 +549,7 @@ FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options, flip) {
     }
 
 
-    var score = _matchScoreGrid(C, match, thresholds);
+    var score = _matchScoreGrid(C, match, thresholds, options.bonus_token_order);
 
     //Flip back the problem if necessary
     if (flip) _flipmatch(match, n);
@@ -518,10 +568,11 @@ FuzzySearch.matchTokens = function (a_tokens, b_tokens, match, options, flip) {
  * @param {Array.<Array.<number>>} C - precomputed score
  * @param {Array.<number>} match - store the position of best matches
  * @param {Array.<number>} thresholds - Information about the minimum score each token is willing to match
+ * @param {number} order_bonus
  * @returns {number} - best score
  * @private
  */
-function _matchScoreGrid(C, match, thresholds) {
+function _matchScoreGrid(C, match, thresholds, order_bonus) {
 
     var i_len = C.length;
     var i, j;
@@ -532,7 +583,8 @@ function _matchScoreGrid(C, match, thresholds) {
         score_tree[i] = {};
     }
 
-    var score = _buildScoreTree(C, score_tree, 0, 0, thresholds);
+    var opt = new TreeOptions(C, score_tree, thresholds, order_bonus);
+    var score = _buildScoreTree(opt, 0, 0).score;
 
     var used = 0, item;
 
@@ -578,15 +630,19 @@ function _matchScoreGrid(C, match, thresholds) {
  * - Prune branch below token threshold.
  * - Build a tree to cache sub-problem for which we already have a solution
  *
- * @param {Array.< Array.<number> >} C
- * @param {Array< Object.<number, MatchTryout> >} cache_tree
+ * @param {TreeOptions} tree_opt
  * @param {number} used_mask
  * @param {number} depth
- * @param {Array.<number>} score_thresholds
- * @returns {number} score
+ * @returns {MatchTrial} best_trial
  * @private
  */
-function _buildScoreTree(C, cache_tree, used_mask, depth, score_thresholds) {
+
+function _buildScoreTree(tree_opt, used_mask, depth) {
+
+    var C = tree_opt.score_grid;
+    var cache_tree = tree_opt.cache_tree;
+    var score_thresholds = tree_opt.score_thresholds;
+    var order_bonus = tree_opt.order_bonus;
 
     var ilen = C.length;
     var jlen = C[depth].length;
@@ -615,11 +671,21 @@ function _buildScoreTree(C, cache_tree, used_mask, depth, score_thresholds) {
         //if we already have computed this sub-block get from cache
         if (has_child) {
             child_key = used_mask | bit;
-            if (child_key in  child_tree) score += child_tree[child_key].score;
-            else score += _buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
+
+            /** @type MatchTrial */
+            var trial = (child_key in  child_tree) ?
+                child_tree[child_key] :
+                _buildScoreTree(tree_opt, child_key, depth + 1);
+
+            score += trial.score;
+            if (j < trial.index) {
+                score += order_bonus
+            }
         }
 
-        if (score > best_score) {
+        //Because of DFS, first loop that finish is toward the end of the query.
+        //As a heuristic, it's good to match higher index toward the end. So we accept equality.
+        if (score >= best_score) {
             best_score = score;
             best_index = j;
         }
@@ -631,7 +697,7 @@ function _buildScoreTree(C, cache_tree, used_mask, depth, score_thresholds) {
 
         child_key = used_mask;
         if (child_key in  child_tree) score = child_tree[child_key].score;
-        else  score = _buildScoreTree(C, cache_tree, child_key, depth + 1, score_thresholds);
+        else  score = _buildScoreTree(tree_opt, child_key, depth + 1).score;
 
         if (score > best_score) {
             best_score = score;
@@ -640,8 +706,9 @@ function _buildScoreTree(C, cache_tree, used_mask, depth, score_thresholds) {
 
     }
 
-    cache_tree[depth][used_mask] = new MatchTryout(best_score, best_index);
-    return best_score;
+    var best_trial = new MatchTrial(best_score, best_index);
+    cache_tree[depth][used_mask] = best_trial;
+    return best_trial;
 
 }
 
@@ -651,10 +718,26 @@ function _buildScoreTree(C, cache_tree, used_mask, depth, score_thresholds) {
  * @param index
  * @constructor
  */
-function MatchTryout(score, index) {
+function MatchTrial(score, index) {
     this.score = score;
     this.index = index;
 }
+
+/**
+ *
+ * @param {Array<Array<number>>} score_grid
+ * @param {Array<Object<number,MatchTrial>>} cache_tree
+ * @param {Array<number>} score_thresholds
+ * @param {number} order_bonus
+ * @constructor
+ */
+function TreeOptions(score_grid, cache_tree, score_thresholds, order_bonus) {
+    this.score_grid = score_grid;
+    this.cache_tree = cache_tree;
+    this.score_thresholds = score_thresholds;
+    this.order_bonus = order_bonus
+}
+
 
 /**
  * Let A,B be two array

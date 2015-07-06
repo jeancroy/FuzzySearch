@@ -3,6 +3,8 @@
 //       SCORING FUNCTIONS
 // ---------------------------
 //
+'use strict';
+
 
 /**
  * Score of "search a in b" using self as options.
@@ -103,14 +105,14 @@ FuzzySearch.score_map = function (a, b, aMap, options) {
  * @param {PackInfo} packinfo
  * @param {string} token
  * @param {FuzzySearchOptions} options
- * @return {number} score
+ * @return {Array.<number>} score
  */
 FuzzySearch.score_single = function (packinfo, token, options) {
     var field_tok = packinfo.tokens[0];
     var m = field_tok.length;
     var n = token.length;
     if (n < options.token_min_rel_size * m || n > options.token_max_rel_size * m) return 0;
-    return FuzzySearch.score_map(field_tok, token, packinfo.map, options)
+    return [FuzzySearch.score_map(field_tok, token, packinfo.map, options)];
 };
 
 /**
@@ -128,6 +130,9 @@ FuzzySearch.score_pack = function (packinfo, field_token, options) {
 
     var packed_tokens = packinfo.tokens;
     var nb_packed = packed_tokens.length;
+
+    //single item token can contain either a single word "overflow" or a large word that need special handling
+    if (nb_packed == 1)return FuzzySearch.score_single(packinfo, field_token, options);
 
     var S = 0xFFFFFFFF, U, c;
     var ZM = packinfo.gate | 0;

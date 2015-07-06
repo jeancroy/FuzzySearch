@@ -43,43 +43,51 @@
 
 <form>
 
-        <div style="text-align: left;display:inline-block; width:90%; max-width:450px; margin:auto; clear:both; margin-top:40px" >
-            <strong>Tip!</strong> Your query can match multiple field, for example
-            "war&nbsp;scalzi" will score in both title and author fields. You can also use <strong>title:</strong> or  <strong>author:</strong> to match a specific field
+    <div style="text-align: left;display:inline-block; width:90%; max-width:450px; margin:auto; clear:both; margin-top:40px">
+        <strong>Tip!</strong> Your query can match multiple field, for example
+        "war&nbsp;scalzi" will score in both title and author fields. You can also use <strong>title:</strong> or
+        <strong>author:</strong> to match a specific field
+    </div>
+
+    <h2>Dataset</h2>
+
+    <div style="text-align: left; display:block; width:90%; max-width:500px; margin:auto">
+
+        <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about
+            2kb</a>* </label><br>
+
+        <label><input type="radio" name="source" value="medium"/> Medium movie dataset, list of title <a
+                href="movies.json">about
+            20kb</a> </label><br>
+
+
+        <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
+            220kb</a> </label><br>
+
+        <label><input type="radio" name="source" value="dir"/> Directory dataset (token separated by "/" instead of
+            spaces), <a href="dir.json">about
+                75kb</a> </label><br><br>
+
+
+        <div>
+            * small book dataset is provided for comparison against a good edit distance implementation <a
+                href="http://kiro.me/projects/fuse.html">fuse.js</a> (or <a href="http://kiro.me/exp/fuse.html">demo</a>)
         </div>
 
-        <h2>Dataset</h2>
+    </div>
 
-        <div style="text-align: left; display:block; width:90%; max-width:400px; margin:auto" >
-
-            <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about
-                2kb</a>* </label><br>
-
-            <label><input type="radio" name="source" value="medium"/> Medium movie dataset, list of title <a href="movies.json">about
-                20kb</a> </label><br>
+    <h2>Options</h2>
 
 
-            <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
-                220kb</a> </label><br><br>
+    <div style="text-align: left; display:block; width:90%; max-width:500px; margin:auto">
 
+        <label><input type="checkbox" name="fused" id="fused"/> Enable score across word "oldmanwar" -> "<b>old man
+            war</b>" </label><br>
 
-            <div>
-                * small book dataset is provided for comparison against a good edit distance implementation <a href="http://kiro.me/projects/fuse.html">fuse.js</a> (or <a href="http://kiro.me/exp/fuse.html">demo</a>)
-            </div>
+        <label><input type="checkbox" name="acro" id="acro"/> Enable acronym score "jrrt" can match <b>J</b>ohn <b>R</b>onald
+            <b>R</b>euel <b>T</b>olkien </label><br>
 
-        </div>
-
-        <h2>Options</h2>
-
-        <br><br>
-
-        <div style="text-align: left; display:block; width:90%; max-width:400px; margin:auto" >
-
-            <label><input type="checkbox" name="fused" id="fused" /> Enable score across word "oldmanwar" -> "<b>old man war</b>" </label><br>
-
-            <label><input type="checkbox" name="acro" id="acro" /> Enable acronym score "jrrt" can match <b>J</b>ohn <b>R</b>onald <b>R</b>euel <b>T</b>olkien </label><br>
-
-        </div>
+    </div>
 
 
 </form>
@@ -231,10 +239,23 @@
                 setsource("movies.json", {title:"."} ); //Movie is a list of title. Set output.title to the item
                 break;
 
+            case "dir":
+                setsource("dir.json", {title: "."});
+                break;
+
             case "small":
             default:
                 setsource("books.json", ["title", "author"]);
                 break;
+        }
+
+        if (this.value == "dir") {
+            //directory list use slashes as token separator
+            fuzzyhound.setOptions({token_split: /\\|\//g})
+        }
+        else {
+            //undefined is used as a special value to reset option to default
+            fuzzyhound.setOptions({token_split: undefined})
         }
 
 
@@ -259,7 +280,7 @@
             dirty: true     //Acronym building is done at source processing stage so we need to reprocess the source.
         });
 
-    })
+    });
 
 
 </script>
