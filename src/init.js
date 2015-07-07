@@ -35,13 +35,12 @@ FuzzySearch.defaultOptions =
     score_per_token: true,            // if true, split query&field in token, allow to match in different order
                                       // if false, bypass at least half the computation cost, very fast
                                       // also disable different token that score different field, because no more token!!
-    token_split: /\s+/g,
 
     score_test_fused: false,          // Try one extra match where we disregard token separation.
                                       // "oldman" match "old man"
 
     score_acronym: false,             // jrrt match against John Ronald Reuel Tolkien
-    acronym_tok: " .,-:",
+    token_sep: " .,-:",
 
     //
     //  Output sort & transform
@@ -97,10 +96,11 @@ FuzzySearch.defaultOptions =
 
     source: [],
     keys: [],
-    lazy: false  // when true, any refresh happens only when a user make a search, option stay put until changed.
-
+    lazy: false, // when true, any refresh happens only when a user make a search, option stay put until changed.
+    token_re: /\s+/g //Separator string will be parsed to this re.
 
 };
+
 
 var _privates =
 /** @lends {FuzzySearch.prototype} */{
@@ -266,11 +266,11 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         }
 
         if (this.acro_re === null || "acronym_tok" in options) {
-            this.acro_re = buildAcronymRE(self_options.acronym_tok);
+            this.acro_re = buildAcronymRE(self_options.token_sep);
         }
 
-        if (this.token_re === null || "token_split" in options) {
-            this.token_re = self_options.token_split;
+        if (this.token_re === null || "token_sep" in options) {
+            this.token_re = self_options.token_re = new RegExp("[" + re_escape(self_options.token_sep) + "]+", "g");
         }
 
         // Build cache

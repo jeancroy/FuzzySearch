@@ -47,13 +47,12 @@ FuzzySearch.defaultOptions =
     score_per_token: true,            // if true, split query&field in token, allow to match in different order
                                       // if false, bypass at least half the computation cost, very fast
                                       // also disable different token that score different field, because no more token!!
-    token_split: /\s+/g,
 
     score_test_fused: false,          // Try one extra match where we disregard token separation.
                                       // "oldman" match "old man"
 
     score_acronym: false,             // jrrt match against John Ronald Reuel Tolkien
-    acronym_tok: " .,-:",
+    token_sep: " .,-:",
 
     //
     //  Output sort & transform
@@ -109,10 +108,11 @@ FuzzySearch.defaultOptions =
 
     source: [],
     keys: [],
-    lazy: false  // when true, any refresh happens only when a user make a search, option stay put until changed.
-
+    lazy: false, // when true, any refresh happens only when a user make a search, option stay put until changed.
+    token_re: /\s+/g //Separator string will be parsed to this re.
 
 };
+
 
 var _privates =
 /** @lends {FuzzySearch.prototype} */{
@@ -278,11 +278,11 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         }
 
         if (this.acro_re === null || "acronym_tok" in options) {
-            this.acro_re = buildAcronymRE(self_options.acronym_tok);
+            this.acro_re = buildAcronymRE(self_options.token_sep);
         }
 
-        if (this.token_re === null || "token_split" in options) {
-            this.token_re = self_options.token_split;
+        if (this.token_re === null || "token_sep" in options) {
+            this.token_re = self_options.token_re = new RegExp("[" + re_escape(self_options.token_sep) + "]+", "g");
         }
 
         // Build cache
@@ -1918,7 +1918,7 @@ FuzzySearch.highlight = function (a, b, options) {
     var opt_score_tok = options.score_per_token;
     var opt_fuse = options.score_test_fused;
     var opt_acro = options.score_acronym;
-    var token_re = options.token_split;
+    var token_re = options.token_re;
 
     var aa = options.normalize(a);
     var bb = options.normalize(b);
@@ -2067,7 +2067,7 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
     var DIAGONAL = 3;
 
     var score_acronym = options.score_acronym;
-    var sep_tokens = options.acronym_tok;
+    var sep_tokens = options.token_sep;
 
     var m = Math.min(a.length + 1, options.token_query_max_length);
     var n = Math.min(b.length + 1, options.token_field_max_length);

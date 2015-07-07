@@ -43,7 +43,7 @@ FuzzySearch.highlight = function (a, b, options) {
     var opt_score_tok = options.score_per_token;
     var opt_fuse = options.score_test_fused;
     var opt_acro = options.score_acronym;
-    var token_re = options.token_split;
+    var token_re = options.token_re;
 
     var aa = options.normalize(a);
     var bb = options.normalize(b);
@@ -192,7 +192,7 @@ FuzzySearch.align = function (a, b, seq_start, seq_end, options) {
     var DIAGONAL = 3;
 
     var score_acronym = options.score_acronym;
-    var sep_tokens = options.acronym_tok;
+    var sep_tokens = options.token_sep;
 
     var m = Math.min(a.length + 1, options.token_query_max_length);
     var n = Math.min(b.length + 1, options.token_field_max_length);

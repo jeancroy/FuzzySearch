@@ -5,15 +5,14 @@
     <meta charset="UTF-8">
     <title>Demo page for FuzzySearch Suggestion engine</title>
 
-    <link href="demo.css" rel="stylesheet" type="text/css" />
+    <link href="demo.css" rel="stylesheet" type="text/css"/>
 
     <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
     <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
 
-    <script src="../dist/FuzzySearch.min.js"></script>
-    <!--script src="../dist/FuzzySearch.js"></script-->
-
+    <!--script src="../dist/FuzzySearch.min.js"></script-->
+    <script src="../dist/FuzzySearch.js"></script>
 
 
 </head>
@@ -23,8 +22,8 @@
 <h1>FuzzySearch Demo</h1>
 
 <p>Demo page for <a href="https://github.com/jeancroy/FuzzySearch">FuzzySearch Suggestion engine</a>. </p>
-<p>Want a minimal setup demo? it's  <a href="simple.html">here</a>. </p>
 
+<p>Want a minimal setup demo? it's <a href="simple.html">here</a>. </p>
 
 
 <h2>Using Twitter Typeahead</h2>
@@ -32,7 +31,6 @@
 <div class="typeahead">
     <input id="demo-query" class="twitter-typeahead" name="demo-query" autocomplete="off" type="text">
 </div>
-
 
 
 <h2>Using Jquery UI Autocomplete</h2>
@@ -93,7 +91,6 @@
 </form>
 
 
-
 <!-- allow to scroll so autocomplete is at top of page -->
 <div style="height: 500px;"></div>
 
@@ -104,7 +101,7 @@
     // We will fill the data once we have the JSON loaded
     //
 
-    var fuzzyhound = new FuzzySearch({output_limit: 6, output_map:"alias"});
+    var fuzzyhound = new FuzzySearch({output_limit: 6, output_map: "alias"});
 
     // output_limit: number of item to return
     //
@@ -127,9 +124,9 @@
 
         return [
             "<div>",
-            "<span class='title'>\"", fuzzyhound.highlight(suggestion.title,"title"), "\"</span>",
-            "<span class='author'>", (suggestion.author)? " by " + fuzzyhound.highlight(suggestion.author,"author"): "" , "</span>",
-            "<span class='score' title='", suggestion._match ,"'>(&nbsp;", suggestion._score.toFixed(2), "&nbsp;)</span>",
+            "<span class='title'>\"", fuzzyhound.highlight(suggestion.title, "title"), "\"</span>",
+            "<span class='author'>", (suggestion.author) ? " by " + fuzzyhound.highlight(suggestion.author, "author") : "", "</span>",
+            "<span class='score' title='", suggestion._match, "'>(&nbsp;", suggestion._score.toFixed(2), "&nbsp;)</span>",
             "</div>"
         ].join("");
 
@@ -178,7 +175,7 @@
     //    Jquery UI Setup
     // - - - - - - - - - - -
 
-    var $el  = $("#demo-query-ui-auto");
+    var $el = $("#demo-query-ui-auto");
     $el.autocomplete({
         minLength: 2,
         delay: 0, //use FuzzySearch debounce
@@ -200,7 +197,7 @@
         var nbitems = items.length, i = -1;
         while (++i < nbitems) {
             var display = items[i].title;
-            this._renderItem(ul, items[i]).data("ui-autocomplete-item",{display: display, value: display});
+            this._renderItem(ul, items[i]).data("ui-autocomplete-item", {display: display, value: display});
         }
         $("<li>").append(footerTemplate()).data("ui-autocomplete-item", {display: "", value: ""}).appendTo(ul);
     };
@@ -232,11 +229,11 @@
         switch (this.value) {
 
             case "large":
-                setsource("books_large.json", {title:"title", author:"authors.author"} );
+                setsource("books_large.json", {title: "title", author: "authors.author"});
                 break;
 
             case "medium":
-                setsource("movies.json", {title:"."} ); //Movie is a list of title. Set output.title to the item
+                setsource("movies.json", {title: "."}); //Movie is a list of title. Set output.title to the item
                 break;
 
             case "dir":
@@ -276,11 +273,14 @@
     $('#acro').change(function () {
 
         fuzzyhound.setOptions({
-            score_acronym:$(this).is(":checked"),
+            score_acronym: $(this).is(":checked"),
             dirty: true     //Acronym building is done at source processing stage so we need to reprocess the source.
         });
 
     });
+
+    //console.log(FuzzySearch.highlight("node","node_module/",fuzzyhound.options));
+    //console.log(FuzzySearch.highlight("node/","node_module/",fuzzyhound.options));
 
 
 </script>
