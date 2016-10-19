@@ -99,7 +99,7 @@ function Indexed(original, fields) {
 
 FuzzySearch.generateFields = function (obj, fieldlist) {
 
-    if (!fieldlist.length) return [[obj.toString()]];
+    if (!fieldlist || !fieldlist.length) return [[obj.toString()]];
 
     var n = fieldlist.length;
     var indexed_fields = new Array(n);
