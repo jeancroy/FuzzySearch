@@ -34,7 +34,7 @@ Then use the method search to perform a search
 
 ```javascript
     var data = ["survey","surgery","insurgence"];
-    var searcher = new FuzzySearch({source:data});
+    var searcher = new FuzzySearch({source:data, keys: []});
     var query = "assurance";
     var result = searcher.search(query)
 ```
@@ -113,7 +113,7 @@ Suppose we have an array of books, where each book looks like this:
 
 First step is to tell FuzzySearch what key to index:  
 
-- `keys = "" or [] or undefined` This indicate source is a list of string, index item directly  
+- `keys = "" or []` This indicate source is a list of string, index item directly  
 - `keys = "title" or ["title"]` This indicate index a single field `title`  
 - `keys = ["title","author.fullname"]` This indicate index multiple fields
 - `keys = {title:"title",author:"author.fullname"}` This indicate index multiple fields and setup aliases/tags
