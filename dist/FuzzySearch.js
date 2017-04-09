@@ -117,6 +117,7 @@ FuzzySearch.defaultOptions =
 var _privates =
 /** @lends {FuzzySearch.prototype} */{
 
+    keys: [],
     tags: [],     // alternative name for each key, support ouput alias and per key search
     index: [],    // source is processed using keys, then stored here
     tags_re: null,
@@ -221,7 +222,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     _optionsHook: function (options) {
 
         //Items of options have been copied into this.options
-        //We still test "optioname in option" to know if we have received something new
+        //We still test "option_name in option" to know if we have received something new
         //This allow to support "shorthand" options and is used to refresh data.
 
         var self_options = this.options;
@@ -1737,7 +1738,7 @@ function Indexed(original, fields) {
 
 FuzzySearch.generateFields = function (obj, fieldlist) {
 
-    if (!fieldlist.length) return [[obj.toString()]];
+    if (!fieldlist || !fieldlist.length) return [[obj.toString()]];
 
     var n = fieldlist.length;
     var indexed_fields = new Array(n);

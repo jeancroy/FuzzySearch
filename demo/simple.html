@@ -12,14 +12,27 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
 
     <script src="../dist/FuzzySearch.min.js"></script>
+    <!--script src="../dist/FuzzySearch.js"></script-->
 
-    <!--
-    <script src="../src/FuzzySearch.js"></script>
-    -->
+    <script>
+
+        //----------------------------------
+        // Minimalist example from manual
+        // Rest of the page is for the basic interactive gui.
+
+        var data = ["survey", "surgery", "insurgence", "potato", "ham", "tower", "lego"];
+        var searcher = new FuzzySearch({source: data});
+        var query = "assurance";
+        var result = searcher.search(query);
+        console.log(result);
+
+
+    </script>
 
 
 </head>
 <body>
+
 
 
 <h1>FuzzySearch Demo</h1>
@@ -82,30 +95,26 @@
         });
     }
 
+
     // Load movie dataset, default options are good for list of string.
+
     setsource("movies.json");
 
-
-    //This would be equivalent. (Note that "root." on output is optional)
+    // > This would be equivalent. (Note that "root." on output is optional)
     //setsource("movies.json","","root.item");
 
-    //Source is a bit more complex, but we output a list of string
+    // > Source is a bit more complex, but we output a list of string
     //setsource("books.json","item.title","item.title");
 
-    //For multiple keys to index keys is an array. Also note that "item." is optional on keys
+    // > For multiple keys to index keys is an array. Also note that "item." is optional on keys
     //setsource("books.json",["title","author"],"item.title");
 
-    // To make sens of the optional prefix you can think that
+    // > To make sens of the optional prefix you can think that
     // - "item" alwais refer to your data, an item in the source array
     // - "root" refer to an object that hold your data with additional information.
     //
     // output_map="", output_map="." or output_map="root" allow to get SearchResult object
     // this is needed to get score or matching field of item
-
-
-
-
-
 
 
 </script>
