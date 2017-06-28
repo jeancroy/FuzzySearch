@@ -109,8 +109,8 @@ FuzzySearch.defaultOptions =
     source: [],
     keys: [],
     lazy: false, // when true, any refresh happens only when a user make a search, option stay put until changed.
-    token_re: /\s+/g //Separator string will be parsed to this re.
-
+    token_re: /\s+/g, //Separator string will be parsed to this re.
+    identify_item: null  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
 };
 
 
@@ -290,7 +290,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         if (options.dirty || ("source" in options) || ("keys" in options)) {
             if (self_options.lazy) this.dirty = true; //Schedule later.
             else {
-                this._prepSource(this.source, this.keys, true);
+                this._prepSource(this.source, this.keys);
                 this.dirty = false;
             }
         }
@@ -348,6 +348,7 @@ function re_escape(str) {
     var re = /[\-\[\]\/\{}\(\)\*\+\?\.\\\^\$\|]/g;
     return str.replace(re, "\\$&");
 }
+
 //
 // - - - - - - - - - - - -
 //  OUTPUT OR POST PROCESS
@@ -1357,7 +1358,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var options = this.options;
 
         if (this.dirty) {
-            this._prepSource(this.source, this.keys, true);
+            this._prepSource(this.source, this.keys);
             this.dirty = false;
         }
 
@@ -1639,14 +1640,62 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
-    //
-    // - - - - - - - - - - - -
-    // PROCESS INPUT DATA
-    // - - - - - - - - - - - -
-    //
+    /**
+     * Apply lowercase, accent removal
+     * Split field into token
+     * Remove small token eg "a" "of" and prefix large token
+     */
+    _prepItem: function (item, keys) {
+
+        var item_fields = FuzzySearch.generateFields(item, keys);
+
+        var nb_fields = item_fields.length;
+
+        for (var field_index = -1; ++field_index < nb_fields;) {
+
+            var field = item_fields[field_index];
+            for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
+
+                var norm = this.options.normalize(field[node_index]);
+                var nodes = norm.split(this.token_re);
+                //Filter size. (If total field length is very small, make an exception.
+                // Eg some movie/Book have a single letter title, filter risk of removing everything )
+                if (norm.length > 2 * this.options.token_field_min_length) nodes = FuzzySearch.filterSize(nodes, this.options.token_field_min_length, this.options.token_field_max_length);
+                if (this.options.score_acronym) nodes.push(norm.replace(this.acro_re, "$1"));
+                field[node_index] = nodes;
+
+            }
+
+        }
+
+        return new Indexed(item, item_fields);
+    },
 
     /**
-     * Add or replace data to search in.
+    * Add a single item to the index.
+    * Overwrites existing items with new content, or inserts new items.
+    * Uses the identify_item option for determining item uniqueness.
+    * If identify_item is null (default), calling this method is append-only with no duplicate detection.
+    */
+    add: function (source, keys) {
+        var index = this.index;
+        var indexmap = this.indexmap;
+        var itemId = this.options.identify_item ? this.options.identify_item(source) : null;
+        var item = this._prepItem(source, keys);
+
+        if (itemId === null) {
+            index[this.index.length] = item;
+        } else if (indexmap[itemId] === undefined) {
+            var nb_indexed = this.index.length;
+            indexmap[itemId] = nb_indexed;
+            index[nb_indexed] = item;
+        } else {
+            index[indexmap[itemId]] = item;
+        }
+    },
+
+    /**
+     * Replace data to search in.
      * Flatten object into array using specified keys,
      * Apply lowercase, accent removal
      * Split field into token
@@ -1654,58 +1703,21 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
      *
      * @param {Array.<Object>} source
      * @param {Array.<string>} keys
-     * @param {boolean} overwrite
      * @private
      *
      */
 
-    _prepSource: function (source, keys, overwrite) {
+    _prepSource: function (source, keys) {
 
-        var nb_items = source.length, out_index;
+        var nb_items = source.length;
 
-        if (overwrite) {
-            this.index = new Array(nb_items);
-            out_index = 0
-        } else
-            out_index = nb_items;
-
-        var index = this.index;
-        var options = this.options;
-        var min_size = options.token_field_min_length;
-        var max_size = options.token_field_max_length;
-        var acronym = options.score_acronym;
-        var acronym_re = this.acro_re;
-        var token_re = this.token_re;
-
+        this.index = new Array(nb_items);
+        this.indexmap = {};
 
         for (var item_index = -1; ++item_index < nb_items;) {
-
-            var item = source[item_index];
-            var item_fields = FuzzySearch.generateFields(item, keys);
-
-            var nb_fields = item_fields.length;
-
-            for (var field_index = -1; ++field_index < nb_fields;) {
-
-                var field = item_fields[field_index];
-                for (var node_index = -1, nb_nodes = field.length; ++node_index < nb_nodes;) {
-
-                    var norm = options.normalize(field[node_index]);
-                    var nodes = norm.split(token_re);
-                    //Filter size. (If total field length is very small, make an exception.
-                    // Eg some movie/Book have a single letter title, filter risk of removing everything )
-                    if (norm.length > 2 * min_size) nodes = FuzzySearch.filterSize(nodes, min_size, max_size);
-                    if (acronym) nodes.push(norm.replace(acronym_re, "$1"));
-                    field[node_index] = nodes;
-
-                }
-
-            }
-
-            index[out_index++] = new Indexed(item, item_fields);
-
+            var sourceItem = source[item_index];
+            this.add(sourceItem, keys);
         }
-
     }
 });
 

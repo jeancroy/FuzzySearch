@@ -97,8 +97,8 @@ FuzzySearch.defaultOptions =
     source: [],
     keys: [],
     lazy: false, // when true, any refresh happens only when a user make a search, option stay put until changed.
-    token_re: /\s+/g //Separator string will be parsed to this re.
-
+    token_re: /\s+/g, //Separator string will be parsed to this re.
+    identify_item: null  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
 };
 
 
@@ -278,7 +278,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         if (options.dirty || ("source" in options) || ("keys" in options)) {
             if (self_options.lazy) this.dirty = true; //Schedule later.
             else {
-                this._prepSource(this.source, this.keys, true);
+                this._prepSource(this.source, this.keys);
                 this.dirty = false;
             }
         }
