@@ -106,8 +106,11 @@ var _privates =
 /** @lends {FuzzySearch.prototype} */{
 
     keys: [],
-    tags: [],     // alternative name for each key, support ouput alias and per key search
-    index: [],    // source is processed using keys, then stored here
+    tags: [],      // alternative name for each key, support ouput alias and per key search
+    index: [],     // source is processed using keys, then stored here
+    index_map: {}, // To manage update of record already in dataset
+    nb_indexed: 0, // To manage active count of index
+
     tags_re: null,
     acro_re: null,
     token_re: null,

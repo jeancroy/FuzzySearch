@@ -118,8 +118,11 @@ var _privates =
 /** @lends {FuzzySearch.prototype} */{
 
     keys: [],
-    tags: [],     // alternative name for each key, support ouput alias and per key search
-    index: [],    // source is processed using keys, then stored here
+    tags: [],      // alternative name for each key, support ouput alias and per key search
+    index: [],     // source is processed using keys, then stored here
+    index_map: {}, // To manage update of record already in dataset
+    nb_indexed: 0, // To manage active count of index
+
     tags_re: null,
     acro_re: null,
     token_re: null,
@@ -1678,20 +1681,27 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     * If identify_item is null (default), calling this method is append-only with no duplicate detection.
     */
     add: function (source, keys) {
+
         var index = this.index;
         var indexmap = this.indexmap;
-        var itemId = this.options.identify_item ? this.options.identify_item(source) : null;
+        var identify = this.options.identify_item;
+        var itemId =  typeof identify === "function" ? this.options.identify_item(source) : null;
         var item = this._prepItem(source, keys);
 
         if (itemId === null) {
-            index[this.index.length] = item;
-        } else if (indexmap[itemId] === undefined) {
-            var nb_indexed = this.index.length;
-            indexmap[itemId] = nb_indexed;
-            index[nb_indexed] = item;
-        } else {
+            index[this.nb_indexed] = item;
+            this.nb_indexed ++;
+        }
+        else if (itemId in indexmap) {
             index[indexmap[itemId]] = item;
         }
+        else{
+            indexmap[itemId] = this.nb_indexed;
+            index[this.nb_indexed] = item;
+            this.nb_indexed ++;
+        }
+
+
     },
 
     /**
@@ -1713,6 +1723,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         this.index = new Array(nb_items);
         this.indexmap = {};
+        this.nb_indexed = 0;
 
         for (var item_index = -1; ++item_index < nb_items;) {
             var sourceItem = source[item_index];

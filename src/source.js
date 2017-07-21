@@ -32,26 +32,33 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     },
 
     /**
-    * Add a single item to the index.
-    * Overwrites existing items with new content, or inserts new items.
-    * Uses the identify_item option for determining item uniqueness.
-    * If identify_item is null (default), calling this method is append-only with no duplicate detection.
-    */
+     * Add a single item to the index.
+     * Overwrites existing items with new content, or inserts new items.
+     * Uses the identify_item option for determining item uniqueness.
+     * If identify_item is null (default), calling this method is append-only with no duplicate detection.
+     */
     add: function (source, keys) {
+
         var index = this.index;
         var indexmap = this.indexmap;
-        var itemId = this.options.identify_item ? this.options.identify_item(source) : null;
+        var identify = this.options.identify_item;
+        var itemId = typeof identify === "function" ? identify(source) : null;
         var item = this._prepItem(source, keys);
 
         if (itemId === null) {
-            index[this.index.length] = item;
-        } else if (indexmap[itemId] === undefined) {
-            var nb_indexed = this.index.length;
-            indexmap[itemId] = nb_indexed;
-            index[nb_indexed] = item;
-        } else {
+            index[this.nb_indexed] = item;
+            this.nb_indexed++;
+        }
+        else if (itemId in indexmap) {
             index[indexmap[itemId]] = item;
         }
+        else {
+            indexmap[itemId] = this.nb_indexed;
+            index[this.nb_indexed] = item;
+            this.nb_indexed++;
+        }
+
+
     },
 
     /**
@@ -73,6 +80,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         this.index = new Array(nb_items);
         this.indexmap = {};
+        this.nb_indexed = 0;
 
         for (var item_index = -1; ++item_index < nb_items;) {
             var sourceItem = source[item_index];
