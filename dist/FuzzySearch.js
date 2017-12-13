@@ -1644,14 +1644,17 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     /**
+     * Take a `sourceItem` (original from source) and keys, produce an `item`
+     * that is ready to be added to `this.index`.
+     *
      * Preparation steps:
      * - Apply lowercase, accent removal
      * - Split field into token
      * - Remove small token eg "a" "of" and prefix large token
      */
-    _prepItem: function (item, keys) {
+    _prepItem: function (sourceItem, keys) {
 
-        var item_fields = FuzzySearch.generateFields(item, keys);
+        var item_fields = FuzzySearch.generateFields(sourceItem, keys);
 
         var nb_fields = item_fields.length;
 
@@ -1672,7 +1675,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         }
 
-        return new Indexed(item, item_fields);
+        return new Indexed(sourceItem, item_fields);
     },
 
     /**
@@ -1688,22 +1691,22 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
      * Uses the identify_item option for determining item uniqueness.
      * If identify_item is null (default), calling this method is append-only with no duplicate detection.
      */
-    add: function (item) {
+    add: function (sourceItem) {
         var itemId = typeof this.options.identify_item === "function"
-            ? this.options.identify_item(item)
+            ? this.options.identify_item(sourceItem)
             : null;
-        var preppedItem = this._prepItem(item, this.keys);
+        var item = this._prepItem(sourceItem, this.keys);
 
         if (itemId === null) {
-            this.index[this.nb_indexed] = preppedItem;
+            this.index[this.nb_indexed] = item;
             this.nb_indexed++;
         }
         else if (itemId in this.index_map) {
-            this.index[this.index_map[itemId]] = preppedItem;
+            this.index[this.index_map[itemId]] = item;
         }
         else {
             this.index_map[itemId] = this.nb_indexed;
-            this.index[this.nb_indexed] = preppedItem;
+            this.index[this.nb_indexed] = item;
             this.nb_indexed++;
         }
     },
@@ -1737,8 +1740,8 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
  * @constructor
  */
 
-function Indexed(original, fields) {
-    this.item = original;
+function Indexed(sourceItem, fields) {
+    this.item = sourceItem;
     this.fields = fields;
 }
 
