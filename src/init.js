@@ -277,11 +277,11 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             this.token_re = self_options.token_re = new RegExp("[" + re_escape(self_options.token_sep) + "]+", "g");
         }
 
-        // Build cache
+        // Determine if we need to rebuild this.index from this.source
         if (options.dirty || ("source" in options) || ("keys" in options)) {
-            if (self_options.lazy) this.dirty = true; //Schedule later.
+            if (self_options.lazy) this.dirty = true; // Schedule later.
             else {
-                this._prepSource(this.source, this.keys);
+                this._buildIndexFromSource();
                 this.dirty = false;
             }
         }

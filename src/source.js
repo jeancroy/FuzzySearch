@@ -1,6 +1,7 @@
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     /**
+     * Prepares an item from `this.source` so it can be added to `this.index`
      * Apply lowercase, accent removal
      * Split field into token
      * Remove small token eg "a" "of" and prefix large token
@@ -37,54 +38,43 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
      * Uses the identify_item option for determining item uniqueness.
      * If identify_item is null (default), calling this method is append-only with no duplicate detection.
      */
-    add: function (source, keys) {
-
-        var index = this.index;
-        var index_map = this.index_map;
-        var identify = this.options.identify_item;
-        var itemId = typeof identify === "function" ? identify(source) : null;
-        var item = this._prepItem(source, keys);
+    add: function (item) {
+        var itemId = typeof this.options.identify_item === "function"
+            ? this.options.identify_item(item)
+            : null;
+        var preppedItem = this._prepItem(item, this.keys);
 
         if (itemId === null) {
-            index[this.nb_indexed] = item;
+            this.index[this.nb_indexed] = preppedItem;
             this.nb_indexed++;
         }
-        else if (itemId in index_map) {
-            index[index_map[itemId]] = item;
+        else if (itemId in this.index_map) {
+            this.index[this.index_map[itemId]] = preppedItem;
         }
         else {
-            index_map[itemId] = this.nb_indexed;
-            index[this.nb_indexed] = item;
+            this.index_map[itemId] = this.nb_indexed;
+            this.index[this.nb_indexed] = preppedItem;
             this.nb_indexed++;
         }
-
-
     },
 
     /**
-     * Replace data to search in.
-     * Flatten object into array using specified keys,
-     * Apply lowercase, accent removal
-     * Split field into token
-     * Remove small token eg "a" "of" and prefix large token
+     * Build (or rebuild) `this.index` from `this.source`
+     * Flatten object into array using specified keys
      *
-     * @param {Array.<Object>} source
-     * @param {Array.<string>} keys
      * @private
-     *
      */
 
-    _prepSource: function (source, keys) {
-
-        var nb_items = source.length;
+    _buildIndexFromSource: function () {
+        var nb_items = this.source.length;
 
         this.index = new Array(nb_items);
         this.index_map = {};
         this.nb_indexed = 0;
 
         for (var item_index = -1; ++item_index < nb_items;) {
-            var sourceItem = source[item_index];
-            this.add(sourceItem, keys);
+            var sourceItem = this.source[item_index];
+            this.add(sourceItem);
         }
     }
 });
@@ -192,4 +182,3 @@ function _collectValues(obj, parts, list, level) {
 
     return list;
 }
-
