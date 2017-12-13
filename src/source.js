@@ -1,10 +1,17 @@
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     /**
-     * Prepares an item from `this.source` so it can be added to `this.index`
-     * Apply lowercase, accent removal
-     * Split field into token
-     * Remove small token eg "a" "of" and prefix large token
+     * Add an item to the index, temporarily
+     * The item will be indexed and included in `this.index`, but `this.source`
+     * will retain the value of the original source.
+     *
+     * WARN: Setting `this.dirty = true` and performing a search will revert the
+     * index to the original `source` value
+     *
+     * Preparation steps:
+     * - Apply lowercase, accent removal
+     * - Split field into token
+     * - Remove small token eg "a" "of" and prefix large token
      */
     _prepItem: function (item, keys) {
 
