@@ -1644,10 +1644,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     /**
-     * Prepares an item from `this.source` so it can be added to `this.index`
-     * Apply lowercase, accent removal
-     * Split field into token
-     * Remove small token eg "a" "of" and prefix large token
+     * Preparation steps:
+     * - Apply lowercase, accent removal
+     * - Split field into token
+     * - Remove small token eg "a" "of" and prefix large token
      */
     _prepItem: function (item, keys) {
 
@@ -1676,8 +1676,15 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     },
 
     /**
-     * Add a single item to the index.
+     * Add an item to the index, temporarily
      * Overwrites existing items with new content, or inserts new items.
+     *
+     * The item will be indexed and included in `this.index`, but `this.source`
+     * will retain the value of the original source.
+     *
+     * WARN: Setting `this.dirty = true` and performing a search will revert the
+     * index to the original `source` value
+     *
      * Uses the identify_item option for determining item uniqueness.
      * If identify_item is null (default), calling this method is append-only with no duplicate detection.
      */
