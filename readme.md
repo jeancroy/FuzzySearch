@@ -10,9 +10,9 @@ It is an approximate string matching library with focus on search and especially
 Can I see a demo ?
 ------------------
 
- You can view the main demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)
+ You can view the main demo page [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/autocomplete.html)    
  If you want to see a simple minimal setup, it's [here](https://rawgit.com/jeancroy/FuzzySearch/master/demo/simple.html) 
-
+ 
 Why a suggestion engine ?
 ------------------------
 
@@ -84,7 +84,7 @@ A note about speed
 There's a few way to achieve speed in javascript. One common pattern is to cache quantities that don't change out of loop. Another way is to understand that modern browser will optimize javascript, but have to switch to slower version of the code when javascript behave away from statically typed language, this is one reason you'll see jsdoc type annotation in this project.
 
 But the most important contribution to speed is algorithm: we can try to find a fast way to compute something, but we can gain more if we find something else, easier to compute, that is somehow equivalent. However fast case often only cover a specialized case. So for that reason we provide 4 different algorithms that solve similar problem (scoring a single keywords, scoring multiple keyword in parallel, scoring long keywords, highlight). There's no configuration, we'll switch transparently to the best algorithm for the task, so whatever you are trying to do there's some fast path for it. 
-
+ 
 
 
 Scoring overview
@@ -111,10 +111,10 @@ Suppose we have an array of books, where each book looks like this:
 
 ### Collect information (And normalize)
 
-First step is to tell FuzzySearch what key to index:
+First step is to tell FuzzySearch what key to index:  
 
-- `keys = "" or [] or undefined` This indicate source is a list of string, index item directly
-- `keys = "title" or ["title"]` This indicate index a single field `title`
+- `keys = "" or [] or undefined` This indicate source is a list of string, index item directly  
+- `keys = "title" or ["title"]` This indicate index a single field `title`  
 - `keys = ["title","author.fullname"]` This indicate index multiple fields
 - `keys = {title:"title",author:"author.fullname"}` This indicate index multiple fields and setup aliases/tags
 
@@ -198,18 +198,18 @@ Flip side of allowing Multiple field matching is giving preference to words in t
 Score is average of
  1. best score, every query token on the best field for the item
  2. best score, every query token on any field (their best field)
-
+ 
 ### Tagged search
 
 By default any query keyword can match against any field, but you can use tagged search syntax to specify which field to match. 
-> **fieldname:** my specific query
-> part that match any field **fieldname:** match specific field
-> match any **fieldname:** match1 **fieldtwo:** match another
+> **fieldname:** my specific query  
+> part that match any field **fieldname:** match specific field  
+> match any **fieldname:** match1 **fieldtwo:** match another  
 
 Anything before `field:` separator perform normal match. Everything after a separator, up to the next one, match only on specified field.
 We recognize reserved field name and will treat `something-else:` as a normal word rather than a separator.
 
-Field name come from key path, this example produce separator `title:` and `author.fullName:`
+Field name come from key path, this example produce separator `title:` and `author.fullName:`  
 ```javascript
 keys = ['title','author.fullName']
 ```
@@ -249,7 +249,7 @@ If you only need the id or title of the original item you can do it like that `o
 
 To achieve that, you need to set `keys` option to a dictionary of `{output:input}` and set `output_map="alias"`. In that case we'll produce the requested format for you. If output is an array we'll apply `options.join_str` to join the elements (default to `", "`)
 
-Example Input:
+Example Input: 
 ```javascript
     keys = {
         title:"item.title",
@@ -257,7 +257,7 @@ Example Input:
     }
 ```
 
-Example output:
+Example output: 
 ```javascript
     result = {
         title:"Some book",
@@ -468,19 +468,19 @@ Dynamic programming
 ------------------
 A very efficient way to solve the longest common substring problem is dynamic programming. We don't use that algorithm for scoring per se, but algorithms we use are clever ways to fill that same table using less efforts, so it's important to understand. (Note that the highlight algorithm is a dynamic programming table that solve a generalization of this problem, where we not only score match but penalize gap.)
 
-|  /  |s|u|r|g|e|r|y|
-|:---:|-|-|-|-|-|-|-|
-|**g**|0|0|0|1|1|1|1|
-|**s**|1|1|1|1|1|1|1|
-|**u**|1|2|2|2|2|2|2|
-|**r**|1|2|3|3|3|3|3|
-|**v**|1|2|3|3|3|3|3|
-|**e**|1|2|3|3|4|4|4|
-|**y**|1|2|3|3|4|4|5|
+|  /  |s|u|r|g|e|r|y| 
+|:---:|-|-|-|-|-|-|-| 
+|**g**|0|0|0|1|1|1|1| 
+|**s**|1|1|1|1|1|1|1| 
+|**u**|1|2|2|2|2|2|2| 
+|**r**|1|2|3|3|3|3|3| 
+|**v**|1|2|3|3|3|3|3| 
+|**e**|1|2|3|3|4|4|4| 
+|**y**|1|2|3|3|4|4|5|  
 
 
 
-Bit-Parallelism
+Bit-Parallelism 
 ---------------
 (See Crochemore 2001, Hyyrö 2004)
 
@@ -536,7 +536,7 @@ S = ~S & mask;
 This algorythm allow a performance profile of O(m+n) instead of typical O(m*n).
 
 
-Multiple string in parralel
+Multiple string in parralel 
 ---------------------------
 (See Hyyrö & Navarro 2006)
 
@@ -561,7 +561,7 @@ Quote from (Hyyrö 2006) with symbol renamed to fit code. `S[m]` refer to the m 
 > We first note that subtracting the vector `U =  S & aMap` from  `S` does not create any carry effects. So the only possible source of interference between different bit regions is the addition  `S + U` ,  and this can be fixed by changing the addition into the form `( S & ZM ) + ( U & ZM )`.  To confirm that this modification does not affect the correct behaviour of the algorithm,  we note the following: If  `S[m] = 0` before the addition, then also `U[m] = 0` and the modification has no effect. If  `S [m] = 1` and `U[m] = 1` before the addition, then the first m bits of the result are the same: the modification just removes the (m +1)th carry bit. Finally, if  `S[m] = 1` and `U[m] = 0` before the addition, then the m th bit of the result of the addition is not important: the result is anyway `|` with `( S − U )`, which has its m th bit set in this case
 
 
-Position Based
+Position Based 
 ---------------
 (See Hyyrö 2009)
 
