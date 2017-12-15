@@ -1686,7 +1686,8 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
      * will retain the value of the original source.
      *
      * WARN: Setting `this.dirty = true` and performing a search will revert the
-     * index to the original `source` value
+     * index to be based on the the original `source` value, before items were
+     * added.
      *
      * Uses the identify_item option for determining item uniqueness.
      * If identify_item is null (default), calling this method is append-only with no duplicate detection.
