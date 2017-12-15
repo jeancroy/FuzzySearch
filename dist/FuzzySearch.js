@@ -1682,34 +1682,35 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
      * Add an item to the index, temporarily
      * Overwrites existing items with new content, or inserts new items.
      *
-     * The item will be indexed and included in `this.index`, but `this.source`
-     * will retain the value of the original source.
-     *
-     * WARN: Setting `this.dirty = true` and performing a search will revert the
-     * index to be based on the the original `source` value, before items were
-     * added.
+     * Assumes the original source is an Array. If your original source isn't an Array, you should manage this.source directly.
      *
      * Uses the identify_item option for determining item uniqueness.
      * If identify_item is null (default), calling this method is append-only with no duplicate detection.
      */
     add: function (source_item) {
-        var itemId = typeof this.options.identify_item === "function"
+        // Update this.index (used for search)
+
+        var item_id = typeof this.options.identify_item === "function"
             ? this.options.identify_item(source_item)
             : null;
         var item = this._prepItem(source_item, this.keys);
 
-        if (itemId === null) {
+        if (item_id === null) {
             this.index[this.nb_indexed] = item;
             this.nb_indexed++;
         }
-        else if (itemId in this.index_map) {
-            this.index[this.index_map[itemId]] = item;
+        else if (item_id in this.index_map) {
+            this.index[this.index_map[item_id]] = item;
         }
         else {
-            this.index_map[itemId] = this.nb_indexed;
+            this.index_map[item_id] = this.nb_indexed;
             this.index[this.nb_indexed] = item;
             this.nb_indexed++;
         }
+
+        // Update this.source (in case a complete reindexing from source is triggered)
+        // Complete reindexing happens if `this.dirty` gets set to `true`
+        this.source.push(source_item);
     },
 
     /**
