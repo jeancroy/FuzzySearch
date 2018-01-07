@@ -18,7 +18,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var options = this.options;
 
         if (this.dirty) {
-            this._prepSource(this.source, this.keys);
+            this._buildIndexFromSource();
             this.dirty = false;
         }
 

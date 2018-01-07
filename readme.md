@@ -656,3 +656,26 @@ Sequence alignment (highlight)
 Comparison of some string similarity measurements
 > https://asecuritysite.com/forensics/simstring
 
+
+Internal Design
+===============
+
+Internally, there are 2 main datastructures that are maintained, `this.source` and `this.index`:
+* `this.source` - the original source data
+* `this.index` - the indexed data for use in searching
+
+The method `this._prepSource` inspects `this.source` and builds `this.index`. `this._prepSource` add each item in source to `this.index` by calling `this.add()`. `this.add()` in turn calls `this._prepItem()` before adding the item to the index.
+
+If the `this.dirty` flag is set to `true`, reindexing will happen upon the next search.
+
+A good summary of how indexing works and how the code is organized can be found in [this issue comment from @jeancroy](https://github.com/jeancroy/FuzzySearch/issues/9#issuecomment-349845521)
+
+
+Tests
+=====
+
+Tests are located in test/ and use Mocha, JSDom, and Babel for ES6 syntax support (in tests only).
+
+To run tests:
+
+    npm run test

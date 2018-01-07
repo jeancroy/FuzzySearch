@@ -289,11 +289,11 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             this.token_re = self_options.token_re = new RegExp("[" + re_escape(self_options.token_sep) + "]+", "g");
         }
 
-        // Build cache
+        // Determine if we need to rebuild this.index from this.source
         if (options.dirty || ("source" in options) || ("keys" in options)) {
-            if (self_options.lazy) this.dirty = true; //Schedule later.
+            if (self_options.lazy) this.dirty = true; // Schedule later.
             else {
-                this._prepSource(this.source, this.keys);
+                this._buildIndexFromSource();
                 this.dirty = false;
             }
         }
@@ -1361,7 +1361,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var options = this.options;
 
         if (this.dirty) {
-            this._prepSource(this.source, this.keys);
+            this._buildIndexFromSource();
             this.dirty = false;
         }
 
@@ -1644,13 +1644,17 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     /**
-     * Apply lowercase, accent removal
-     * Split field into token
-     * Remove small token eg "a" "of" and prefix large token
+     * Take a `source_item` (unprocessed item from source) and keys and produce
+     * an `item` that's ready to be added to `this.index`.
+     *
+     * Preparation steps:
+     * - Apply lowercase, accent removal
+     * - Split field into token
+     * - Remove small token eg "a" "of" and prefix large token
      */
-    _prepItem: function (item, keys) {
+    _prepItem: function (source_item, keys) {
 
-        var item_fields = FuzzySearch.generateFields(item, keys);
+        var item_fields = FuzzySearch.generateFields(source_item, keys);
 
         var nb_fields = item_fields.length;
 
@@ -1671,63 +1675,61 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         }
 
-        return new Indexed(item, item_fields);
+        return new Indexed(source_item, item_fields);
     },
 
     /**
-     * Add a single item to the index.
+     * Add an item to the index, temporarily
      * Overwrites existing items with new content, or inserts new items.
+     *
+     * Assumes the original source is an Array. If your original source isn't an Array, you should manage this.source directly.
+     *
      * Uses the identify_item option for determining item uniqueness.
      * If identify_item is null (default), calling this method is append-only with no duplicate detection.
      */
-    add: function (source, keys) {
+    add: function (source_item) {
+        // Update this.index (used for search)
 
-        var index = this.index;
-        var index_map = this.index_map;
-        var identify = this.options.identify_item;
-        var itemId = typeof identify === "function" ? identify(source) : null;
-        var item = this._prepItem(source, keys);
+        var item_id = typeof this.options.identify_item === "function"
+            ? this.options.identify_item(source_item)
+            : null;
+        var item = this._prepItem(source_item, this.keys);
 
-        if (itemId === null) {
-            index[this.nb_indexed] = item;
+        if (item_id === null) {
+            this.index[this.nb_indexed] = item;
             this.nb_indexed++;
         }
-        else if (itemId in index_map) {
-            index[index_map[itemId]] = item;
+        else if (item_id in this.index_map) {
+            this.index[this.index_map[item_id]] = item;
         }
         else {
-            index_map[itemId] = this.nb_indexed;
-            index[this.nb_indexed] = item;
+            this.index_map[item_id] = this.nb_indexed;
+            this.index[this.nb_indexed] = item;
             this.nb_indexed++;
         }
 
-
+        // Update this.source (in case a complete reindexing from source is triggered)
+        // Complete reindexing happens if `this.dirty` gets set to `true`
+        this.source.push(source_item);
     },
 
     /**
-     * Replace data to search in.
-     * Flatten object into array using specified keys,
-     * Apply lowercase, accent removal
-     * Split field into token
-     * Remove small token eg "a" "of" and prefix large token
+     * Build (or rebuild) `this.index` from `this.source`
+     * Flatten object into array using specified keys
      *
-     * @param {Array.<Object>} source
-     * @param {Array.<string>} keys
      * @private
-     *
      */
 
-    _prepSource: function (source, keys) {
-
-        var nb_items = source.length;
+    _buildIndexFromSource: function () {
+        var nb_items = this.source.length;
 
         this.index = new Array(nb_items);
         this.index_map = {};
         this.nb_indexed = 0;
 
         for (var item_index = -1; ++item_index < nb_items;) {
-            var sourceItem = source[item_index];
-            this.add(sourceItem, keys);
+            var source_item = this.source[item_index];
+            this.add(source_item);
         }
     }
 });
@@ -1740,8 +1742,8 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
  * @constructor
  */
 
-function Indexed(original, fields) {
-    this.item = original;
+function Indexed(source_item, fields) {
+    this.item = source_item;
     this.fields = fields;
 }
 
@@ -1836,7 +1838,6 @@ function _collectValues(obj, parts, list, level) {
     return list;
 }
 
-
 //
 // Shared string and array of string functions
 //
@@ -1861,7 +1862,7 @@ function normalize(str) {
 
 function getDiacriticsMap() {
     // replace most common accents in french-spanish by their base letter
-    //"������?��������������������"
+    //"������?�������������������"
     var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
     var to = "aaaaaaeeeeeiiiioooooouuuunc";
     var diacriticsMap = {};
