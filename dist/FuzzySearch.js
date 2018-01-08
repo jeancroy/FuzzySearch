@@ -1360,7 +1360,8 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         this.start_time = time_start;
         var options = this.options;
 
-        if (this.dirty) {
+        // As long as lazy is set to false, we guarantee that making a search is read only.
+        if (this.dirty && options.lazy) {
             this._buildIndexFromSource();
             this.dirty = false;
         }
@@ -1679,38 +1680,57 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     },
 
     /**
-     * Add an item to the index, temporarily
-     * Overwrites existing items with new content, or inserts new items.
+     * Add an item to search index AND source collection.
+     * It'll use identify_item to find if the item already exist.
+     * If identify_item is null (default), calling this method is append-only with no duplicate detection
      *
-     * Assumes the original source is an Array. If your original source isn't an Array, you should manage this.source directly.
+     * To update the source, it use the assumption that this.source and this.index can be synced
+     * by array index. That assumption will be true if source is a plain array, and always updated by this library.
+     * Feel free to set `should_update_source` to false to manually manage source collection.
      *
-     * Uses the identify_item option for determining item uniqueness.
-     * If identify_item is null (default), calling this method is append-only with no duplicate detection.
+     * Keeping source in sync is important to allow to recompute index from source.
+     * This will happens with certain setting changes.
+     *
+     *  @param {*} source_item - item to add to search index
+     *  @param {boolean=} should_update_source - set to false to skip updating the source.
      */
-    add: function (source_item) {
-        // Update this.index (used for search)
+
+    add: function(source_item, should_update_source){
+
+        // Default to keeping source in sync.
+        if(arguments.length < 2)
+            should_update_source = true;
 
         var item_id = typeof this.options.identify_item === "function"
             ? this.options.identify_item(source_item)
             : null;
-        var item = this._prepItem(source_item, this.keys);
 
+        // Find where to insert new item
+
+        var idx;
         if (item_id === null) {
-            this.index[this.nb_indexed] = item;
+            // No identifier, append to end
+            idx = this.nb_indexed;
             this.nb_indexed++;
         }
         else if (item_id in this.index_map) {
-            this.index[this.index_map[item_id]] = item;
+            // Item exist, update
+            idx = this.index_map[item_id];
         }
         else {
+            // New identifier, append to end & record new
             this.index_map[item_id] = this.nb_indexed;
-            this.index[this.nb_indexed] = item;
+            idx = this.nb_indexed;
             this.nb_indexed++;
         }
 
-        // Update this.source (in case a complete reindexing from source is triggered)
-        // Complete reindexing happens if `this.dirty` gets set to `true`
-        this.source.push(source_item);
+        // Compute indexed item and update index
+        this.index[idx] = this._prepItem(source_item, this.keys);
+
+        // Insert in source;
+        if(should_update_source)
+            this.source[idx] = source_item;
+
     },
 
     /**
@@ -1729,7 +1749,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         for (var item_index = -1; ++item_index < nb_items;) {
             var source_item = this.source[item_index];
-            this.add(source_item);
+
+            // Add item to index.
+            // Because we are iterating over source, do not attempt to modify it.
+            this.add(source_item, false);
         }
     }
 });
@@ -1737,7 +1760,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 /**
  * Original item with cached normalized field
  *
- * @param {*} original
+ * @param {*} source_item
  * @param {Array.<string>} fields
  * @constructor
  */
@@ -1862,7 +1885,7 @@ function normalize(str) {
 
 function getDiacriticsMap() {
     // replace most common accents in french-spanish by their base letter
-    //"������?�������������������"
+    //"������?��������������������"
     var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
     var to = "aaaaaaeeeeeiiiioooooouuuunc";
     var diacriticsMap = {};

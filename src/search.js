@@ -17,7 +17,8 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         this.start_time = time_start;
         var options = this.options;
 
-        if (this.dirty) {
+        // As long as lazy is set to false, we guarantee that making a search is read only.
+        if (this.dirty && options.lazy) {
             this._buildIndexFromSource();
             this.dirty = false;
         }
