@@ -36,16 +36,29 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     },
 
     /**
-     * Add an item to the index, temporarily
-     * Overwrites existing items with new content, or inserts new items.
+     * Append item to the end of source then process that item to the search index.
+     * This method is safe wrt to index rebuilding.
      *
-     * Assumes the original source is an Array. If your original source isn't an Array, you should manage this.source directly.
+     * If you do not want to modify source, you can call  index_item directly.
+     *
+     */
+    add: function (source_item) {
+
+        // Update this.source (in case a complete reindexing from source is triggered)
+        this.source.push(source_item);
+
+        // Update this.index (used for search)
+        this.index_item(source_item)
+
+    },
+
+    /**
+     * Add an item to the current search index.
      *
      * Uses the identify_item option for determining item uniqueness.
      * If identify_item is null (default), calling this method is append-only with no duplicate detection.
      */
-    add: function (source_item) {
-        // Update this.index (used for search)
+    index_item: function(source_item){
 
         var item_id = typeof this.options.identify_item === "function"
             ? this.options.identify_item(source_item)
@@ -65,9 +78,6 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             this.nb_indexed++;
         }
 
-        // Update this.source (in case a complete reindexing from source is triggered)
-        // Complete reindexing happens if `this.dirty` gets set to `true`
-        this.source.push(source_item);
     },
 
     /**
@@ -86,7 +96,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
         for (var item_index = -1; ++item_index < nb_items;) {
             var source_item = this.source[item_index];
-            this.add(source_item);
+            this.index_item(source_item);
         }
     }
 });
