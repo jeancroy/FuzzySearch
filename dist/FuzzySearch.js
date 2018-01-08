@@ -1698,7 +1698,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
     add: function(source_item, should_update_source){
 
         // Default to keeping source in sync.
-        if(arguments.length < 2)
+        if(should_update_source === undefined)
             should_update_source = true;
 
         var item_id = typeof this.options.identify_item === "function"
