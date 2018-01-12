@@ -76,6 +76,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var opt_bpd = options.bonus_position_decay;
         var opt_fge = options.field_good_enough;
         var opt_trb = options.thresh_relative_to_best;
+        var opt_max_inners = options.max_inners;
         var opt_score_tok = options.score_per_token;
         var opt_round = options.score_round;
         var thresh_include = options.thresh_include;
@@ -165,8 +166,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
             //candidate for best result ? push to list
             //
 
-            if (item_score > thresh_include) {
+            var max_inners_reached = (opt_max_inners && opt_max_inners <= results.length);
+            if (max_inners_reached) break;
 
+            if (item_score > thresh_include) {
                 item_score = Math.round(item_score / opt_round) * opt_round;
 
                 results.push(new SearchResult(
@@ -177,7 +180,6 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                     matched_node_index,
                     item_fields[0][0].join(" ")
                 ));
-
             }
 
         }
