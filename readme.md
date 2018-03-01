@@ -451,11 +451,6 @@ We multiply Jaro-like score by llcs and the score become:
 Having m squared give the advantage of even better score for good matches and worse score for bad match. It lower the likelihood of multiple bad match out-score a single good match. A character matched in a good token is now worth more than a character matched in a bad token.
 
 
-
-
-
-
-
 Configuration
 ==============
 
@@ -476,6 +471,7 @@ Configuration
 | highlight_tk_max_size    | 64      | max size of a token for highlight algorithm (it is BVMAXSIZE(31) for search)|
 | highlight_before         | ...     |   tag to put before the highlight <br> `default: <strong class="highlight">`|
 | highlight_after          |  ...    | after the highlight <br> `default: </strong>`   |
+| max_inners               | null    | Optional. High positive count mitigation for large datasets. See same  [fuzz-aldrin-plus](https://github.com/jeancroy/fuzz-aldrin-plus/blob/c8cf693ee77909d0dbfbc90b452733bba5e5c8bd/README.md#high-positive-count-mitigation) argument|
 
 
 Algorithms
@@ -641,7 +637,6 @@ More precisely we'll store sequence of consecutive increase instead of each incr
  otherwise it is copied to current line.
 
 
-
 References
 ==========
 
@@ -674,11 +669,21 @@ Comparison of some string similarity measurements
 > https://asecuritysite.com/forensics/simstring
 
 
-Tests
-=====
+Development & Tests
+===================
+
+See [src/readme.md](src/readme.md) for some information about how the code is laid out.
+
+Install Dependencies
+--------------------
+
+    yarn
+
+Run Tests
+---------
 
 Tests are located in test/ and use Mocha, JSDom, and Babel for ES6 syntax support (in tests only).
 
 To run tests:
 
-    npm run test
+    yarn test

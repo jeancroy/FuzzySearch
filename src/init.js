@@ -23,6 +23,7 @@ FuzzySearch.defaultOptions =
     thresh_include: 2.0,              // To be a candidate, score of item must be at least this
     thresh_relative_to_best: 0.5,     // and be at least this fraction of the best score
     field_good_enough: 20,            // If a field have this score, stop searching other fields. (field score is before item related bonus)
+    max_inners: null,                 // With large datasets, abandon searches early when there area lot of matches ("high positive count mitigation", see https://github.com/jeancroy/fuzz-aldrin-plus#high-positive-count-mitigation for more details)
 
     //
     //  Scoring, bonus
