@@ -75,6 +75,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var options = this.options;
         var opt_bpd = options.bonus_position_decay;
         var opt_fge = options.field_good_enough;
+        var opt_max_inners = options.max_inners;
         var opt_trb = options.thresh_relative_to_best;
         var opt_score_tok = options.score_per_token;
         var opt_round = options.score_round;
@@ -160,6 +161,13 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 var tmp = item_score * opt_trb;
                 if (tmp > thresh_include) thresh_include = tmp;
             }
+
+            //
+            // Don't consider more expensive calculations if max_inners has been reached
+            ///
+
+            var max_inners_reached = (opt_max_inners && results.length >= opt_max_inners);
+            if (max_inners_reached) break;
 
             //
             //candidate for best result ? push to list
@@ -296,5 +304,3 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     }
 });
-
-

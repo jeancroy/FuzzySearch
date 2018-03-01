@@ -35,6 +35,7 @@ FuzzySearch.defaultOptions =
     thresh_include: 2.0,              // To be a candidate, score of item must be at least this
     thresh_relative_to_best: 0.5,     // and be at least this fraction of the best score
     field_good_enough: 20,            // If a field have this score, stop searching other fields. (field score is before item related bonus)
+    max_inners: null,                 // With large datasets, abandon searches early when there area lot of matches ("high positive count mitigation", see https://github.com/jeancroy/fuzz-aldrin-plus#high-positive-count-mitigation for more details)
 
     //
     //  Scoring, bonus
@@ -1418,6 +1419,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var options = this.options;
         var opt_bpd = options.bonus_position_decay;
         var opt_fge = options.field_good_enough;
+        var opt_max_inners = options.max_inners;
         var opt_trb = options.thresh_relative_to_best;
         var opt_score_tok = options.score_per_token;
         var opt_round = options.score_round;
@@ -1503,6 +1505,13 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 var tmp = item_score * opt_trb;
                 if (tmp > thresh_include) thresh_include = tmp;
             }
+
+            //
+            // Don't consider more expensive calculations if max_inners has been reached
+            ///
+
+            var max_inners_reached = (opt_max_inners && results.length >= opt_max_inners);
+            if (max_inners_reached) break;
 
             //
             //candidate for best result ? push to list
@@ -1639,8 +1648,6 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
     }
 });
-
-
 
 extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
@@ -1885,7 +1892,7 @@ function normalize(str) {
 
 function getDiacriticsMap() {
     // replace most common accents in french-spanish by their base letter
-    //"������?��������������������"
+    //"������?�������������������"
     var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
     var to = "aaaaaaeeeeeiiiioooooouuuunc";
     var diacriticsMap = {};
