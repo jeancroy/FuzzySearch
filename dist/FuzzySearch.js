@@ -1885,7 +1885,7 @@ function normalize(str) {
 
 function getDiacriticsMap() {
     // replace most common accents in french-spanish by their base letter
-    //"������?��������������������"
+    //"������?�������������������"
     var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
     var to = "aaaaaaeeeeeiiiioooooouuuunc";
     var diacriticsMap = {};
