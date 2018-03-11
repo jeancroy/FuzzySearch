@@ -100,7 +100,10 @@ FuzzySearch.defaultOptions =
     token_re: /\s+/g, //Separator string will be parsed to this re.
 
     identify_item: null,  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
-    use_index_store: false // Enable a time vs memory trade-off for faster search.
+
+    use_index_store: false, // Enable a time vs memory trade-off for faster search.
+    store_thresh: 0.7      // cutoff point relative to best, to graduate from store phase.
+
 
 };
 

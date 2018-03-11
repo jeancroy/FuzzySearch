@@ -46,7 +46,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         if (idAndCount.length == 0) return [];
 
         // Get minimum quality and remap to original items.
-        var tresh = idAndCount[0].count * 0.5;
+        var tresh = idAndCount[0].count * this.options.store_thresh;
         idAndCount = FuzzySearch.filterGTE(idAndCount, "count", tresh);
         return FuzzySearch.map(idAndCount, function (x) {
             return source[x.id]
