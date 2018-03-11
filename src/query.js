@@ -38,7 +38,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var nb_tags = tags.length;
         var token_re = this.token_re;
 
-        var norm, fused, fused_map, children, has_tags, group;
+        var norm, fused, fused_map, children, has_tags, group, words;
 
         if (opt_tok && nb_tags && tags_re) {
 
@@ -59,7 +59,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
             q_parts[q_index] = query_string.substring(start);
 
-            children = new Array(nb_tags);
+            children = [];
 
             for (var i = -1; ++i < nb_tags;) {
 
@@ -69,20 +69,23 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 norm = options.normalize(qp);
                 fused = norm.substring(0, opt_fuselen);
                 fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
-                group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax));
+                words = FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax);
+                group = FuzzySearch.pack_tokens(words);
 
-                children[i] = new Query(norm, group, fused, fused_map, false, []);
+                children[i] = new Query(norm, words, group, fused, fused_map, false, []);
             }
 
 
             norm = options.normalize(q_parts[0]);
-            group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax));
+            words = FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax);
+            group = FuzzySearch.pack_tokens(words);
 
         }
 
         else {
             norm = options.normalize(query_string);
-            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax)) : [];
+            words = FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax);
+            group = opt_tok ? FuzzySearch.pack_tokens(words) : [];
             has_tags = false;
             children = new Array(nb_tags);
         }
@@ -90,7 +93,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         fused = norm.substring(0, opt_fuselen);
         fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
 
-        return new Query(norm, group, fused, fused_map, has_tags, children)
+        return new Query(norm, words, group, fused, fused_map, has_tags, children)
 
     }
 });
@@ -103,6 +106,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
  * Hold a query
  *
  * @param {string} normalized
+ * @param {Array.<string>} words
  * @param {Array.<PackInfo>} tokens_groups
  * @param {string} fused_str
  * @param {Object} fused_map
@@ -112,9 +116,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
  * @constructor
  */
 
-function Query(normalized, tokens_groups, fused_str, fused_map, has_children, children) {
+function Query(normalized, words, tokens_groups, fused_str, fused_map, has_children, children) {
 
     this.normalized = normalized;
+    this.words = words;
     this.tokens_groups = tokens_groups;
 
     this.fused_str = fused_str;

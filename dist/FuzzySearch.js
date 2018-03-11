@@ -110,7 +110,10 @@ FuzzySearch.defaultOptions =
     keys: [],
     lazy: false, // when true, any refresh happens only when a user make a search, option stay put until changed.
     token_re: /\s+/g, //Separator string will be parsed to this re.
-    identify_item: null  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
+
+    identify_item: null,  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
+    use_index_store: false // Enable a time vs memory trade-off for faster search.
+
 };
 
 
@@ -118,10 +121,11 @@ var _privates =
 /** @lends {FuzzySearch.prototype} */{
 
     keys: [],
-    tags: [],      // alternative name for each key, support ouput alias and per key search
+    tags: [],      // alternative name for each key, support output alias and per key search
     index: [],     // source is processed using keys, then stored here
     index_map: {}, // To manage update of record already in dataset
     nb_indexed: 0, // To manage active count of index
+    store: {},     // Dictionary used for time VS memory trade off. (Optional)
 
     tags_re: null,
     acro_re: null,
@@ -290,7 +294,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         }
 
         // Determine if we need to rebuild this.index from this.source
-        if (options.dirty || ("source" in options) || ("keys" in options)) {
+        if (options.dirty || ("source" in options) || ("keys" in options) || ("use_index_store" in options)) {
             if (self_options.lazy) this.dirty = true; // Schedule later.
             else {
                 this._buildIndexFromSource();
@@ -587,7 +591,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var nb_tags = tags.length;
         var token_re = this.token_re;
 
-        var norm, fused, fused_map, children, has_tags, group;
+        var norm, fused, fused_map, children, has_tags, group, words;
 
         if (opt_tok && nb_tags && tags_re) {
 
@@ -608,7 +612,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
 
             q_parts[q_index] = query_string.substring(start);
 
-            children = new Array(nb_tags);
+            children = [];
 
             for (var i = -1; ++i < nb_tags;) {
 
@@ -618,20 +622,23 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 norm = options.normalize(qp);
                 fused = norm.substring(0, opt_fuselen);
                 fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
-                group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax));
+                words = FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax);
+                group = FuzzySearch.pack_tokens(words);
 
-                children[i] = new Query(norm, group, fused, fused_map, false, []);
+                children[i] = new Query(norm, words, group, fused, fused_map, false, []);
             }
 
 
             norm = options.normalize(q_parts[0]);
-            group = FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax));
+            words = FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax);
+            group = FuzzySearch.pack_tokens(words);
 
         }
 
         else {
             norm = options.normalize(query_string);
-            group = opt_tok ? FuzzySearch.pack_tokens(FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax)) : [];
+            words = FuzzySearch.filterSize(norm.split(token_re), opt_qmin, opt_qmax);
+            group = opt_tok ? FuzzySearch.pack_tokens(words) : [];
             has_tags = false;
             children = new Array(nb_tags);
         }
@@ -639,7 +646,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         fused = norm.substring(0, opt_fuselen);
         fused_map = (opt_fuse || !opt_tok) ? FuzzySearch.alphabet(fused) : {};
 
-        return new Query(norm, group, fused, fused_map, has_tags, children)
+        return new Query(norm, words, group, fused, fused_map, has_tags, children)
 
     }
 });
@@ -652,6 +659,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
  * Hold a query
  *
  * @param {string} normalized
+ * @param {Array.<string>} words
  * @param {Array.<PackInfo>} tokens_groups
  * @param {string} fused_str
  * @param {Object} fused_map
@@ -661,9 +669,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
  * @constructor
  */
 
-function Query(normalized, tokens_groups, fused_str, fused_map, has_children, children) {
+function Query(normalized, words, tokens_groups, fused_str, fused_map, has_children, children) {
 
     this.normalized = normalized;
+    this.words = words;
     this.tokens_groups = tokens_groups;
 
     this.fused_str = fused_str;
@@ -1355,8 +1364,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
      */
     search: function (query_string) {
 
-        var clock = (window.performance && window.performance.now) ? window.performance : Date;
-        var time_start = clock.now();
+        var time_start = Date.now();
         this.start_time = time_start;
         var options = this.options;
 
@@ -1369,6 +1377,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var query = this.query = this._prepQuery(query_string);
         var source = this.index;
         var results = [];
+
+        if (options.use_index_store) {
+            source = this._storeSearch(query, source);
+        }
 
         if (options.filter) {
             source = options.filter.call(this, source);
@@ -1392,7 +1404,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 results = FuzzySearch.mapField(results, options.output_map, options.output_limit);
         }
 
-        var time_end = clock.now();
+        var time_end = Date.now();
         this.search_time = time_end - time_start;
         this.results = results;
 
@@ -1725,11 +1737,16 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         }
 
         // Compute indexed item and update index
-        this.index[idx] = this._prepItem(source_item, this.keys);
+        var prepared = this._prepItem(source_item, this.keys);
+        this.index[idx] = prepared;
 
         // Insert in source;
         if(should_update_source)
             this.source[idx] = source_item;
+
+        if (this.options.use_index_store) {
+            this._storeAdd(prepared, idx);
+        }
 
     },
 
@@ -1861,6 +1878,227 @@ function _collectValues(obj, parts, list, level) {
     return list;
 }
 
+    'use strict';
+
+    extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
+
+        /**
+         *
+         * @param  {Indexed} preparedItem
+         * @param  {int} idx
+         */
+        _storeAdd: function (preparedItem, idx) {
+
+            var keyList = keysFromIndexedItem(preparedItem);
+            if (keyList.length == 0) return;
+
+            // register idx on all appropriate key
+            for (var i = 0; i < keyList.length; i++) {
+                var key = keyList[i];
+
+                if (key in this.store) {
+                    // append to existing array of index
+                    this.store[key].push(idx);
+                }
+                else {
+                    // Format is dict key => array of item index
+                    this.store[key] = [idx];
+                }
+            }
+
+
+        },
+
+
+        /**
+         *
+         * @param  {Query} preparedQuery
+         * @param  {Array.<Indexed>} source
+         */
+        _storeSearch: function (preparedQuery, source) {
+
+            // Scan query for index keys.
+            var keyList = keysFromQuery(preparedQuery);
+            if (keyList.length == 0) return [];
+
+            // return filtered source
+            var idAndCount = retrieveCount(keyList, this.store);
+            if (idAndCount.length == 0) return [];
+
+            // Get minimum quality and remap to original items.
+            var tresh = idAndCount[0].count * 0.5;
+            idAndCount = FuzzySearch.filterGTE(idAndCount, "count", tresh);
+            return FuzzySearch.map(idAndCount, function (x) {
+                return source[x.id]
+            });
+
+        }
+
+    });
+
+    /**
+     *
+     * @param  {Indexed} preparedItem
+     */
+
+    function keysFromIndexedItem(preparedItem) {
+
+        // Process the nested structure of a prepared item in order to extract index keys.
+        var keyList = [];
+        var keyDict = {};
+
+        // item -> fields -> nodes -> word_tokens
+        var fields = preparedItem.fields;
+        for (var i = 0; i < fields.length; i++) {
+            var nodes = fields[i];
+            for (var j = 0; j < nodes.length; j++) {
+                var words = nodes[j];
+                for (var k = 0; k < words.length; k++) {
+                    keysFromWord(words[k], keyList, keyDict)
+                }
+            }
+        }
+
+        return keyList;
+    }
+
+    /**
+     *
+     * @param  {Query} query
+     */
+
+    function keysFromQuery(query) {
+
+        var keyList = [];
+        var keyDict = {};
+        var i, j;
+
+        var words = query.words;
+        for (i = 0; i < words.length; i++) {
+            keysFromWord(words[i], keyList, keyDict)
+        }
+
+        var children = query.children;
+        for (i = 0; i < children.length; i++) {
+            words = children[i].words;
+            for (j = 0; j < words; j++) {
+                keysFromWord(words[j], keyList, keyDict)
+            }
+        }
+
+        return keyList;
+
+    }
+
+
+    function keysFromWord(word, keysList, existingDict) {
+
+        var len = word.length;
+        if (len == 0) return;
+
+        if (len >= 3) {
+            // 3o6, 3o5, 3o4, 3o3
+            select3(word, 6, keysList, existingDict)
+        }
+
+        if (len >= 2) {
+            // 2o4, 2o3,2o2
+            select2(word, 4, keysList, existingDict)
+        }
+
+        // 1o1 strategy: This index by first letter
+        union(word[0], keysList, existingDict);
+
+    }
+
+    function select2(str, maxlen, existingList, existingDict) {
+        var len = Math.min(str.length, maxlen);
+        for (var i = 0; i < len - 1; i++) {
+            for (var j = i + 1; j < len; j++) {
+                union(str[i] + str[j], existingList, existingDict)
+            }
+        }
+        return existingList;
+    }
+
+    function select3(str, maxlen, existingList, existingDict) {
+        var len = Math.min(str.length, maxlen);
+        for (var i = 0; i < len - 2; i++) {
+            for (var j = i + 1; j < len - 1; j++) {
+                for (var k = j + 1; k < len; k++) {
+                    union(str[i] + str[j] + str[k], existingList, existingDict)
+                }
+            }
+        }
+        return existingList;
+    }
+
+
+    function union(word, existingList, existingDict) {
+        if (!(word in existingDict)) {
+            existingDict[word] = true;
+            existingList.push(word);
+        }
+    }
+
+    function retrieveCount(keys, store) {
+
+        // Dictionary idx => count
+        var countPerIndex = {};
+
+        if (keys.length == 0)
+            return [];
+
+        for (var i = 0; i < keys.length; i++) {
+
+            var key = keys[i];
+
+            // Does the key exist in the index ?
+            if (key in store) {
+
+                // If so add every entry of that key into countPerIndex
+                // Also for each entry, maintain a count of matched keys.
+
+                var idxList = store[key];
+                for (var j = 0; j < idxList.length; j++) {
+
+                    var idx = idxList[j];
+
+                    if (idx in countPerIndex) {
+                        countPerIndex[idx]++;
+                    } else {
+                        countPerIndex[idx] = 1;
+                    }
+                }
+
+            }
+        }
+
+        // Transform countPerIndex into a sorted list of IdAndCount
+
+        var outList = [];
+
+        for (var id in countPerIndex) {
+            if (countPerIndex.hasOwnProperty(id)) {
+                outList.push(new IdAndCount(id, countPerIndex[id]));
+            }
+        }
+
+        // We can probably filterGte here.
+
+        // Custom sort decreasing order
+        outList = outList.sort(function (a, b) {
+            return b.count - a.count
+        });
+
+        return outList;
+
+    }
+
+    function IdAndCount(id, count) {
+        this.id = id;
+        this.count = count;
+    }
 //
 // Shared string and array of string functions
 //

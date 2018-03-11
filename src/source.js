@@ -81,11 +81,16 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         }
 
         // Compute indexed item and update index
-        this.index[idx] = this._prepItem(source_item, this.keys);
+        var prepared = this._prepItem(source_item, this.keys);
+        this.index[idx] = prepared;
 
         // Insert in source;
         if(should_update_source)
             this.source[idx] = source_item;
+
+        if (this.options.use_index_store) {
+            this._storeAdd(prepared, idx);
+        }
 
     },
 

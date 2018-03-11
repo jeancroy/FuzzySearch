@@ -98,7 +98,10 @@ FuzzySearch.defaultOptions =
     keys: [],
     lazy: false, // when true, any refresh happens only when a user make a search, option stay put until changed.
     token_re: /\s+/g, //Separator string will be parsed to this re.
-    identify_item: null  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
+
+    identify_item: null,  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
+    use_index_store: false // Enable a time vs memory trade-off for faster search.
+
 };
 
 
@@ -106,10 +109,11 @@ var _privates =
 /** @lends {FuzzySearch.prototype} */{
 
     keys: [],
-    tags: [],      // alternative name for each key, support ouput alias and per key search
+    tags: [],      // alternative name for each key, support output alias and per key search
     index: [],     // source is processed using keys, then stored here
     index_map: {}, // To manage update of record already in dataset
     nb_indexed: 0, // To manage active count of index
+    store: {},     // Dictionary used for time VS memory trade off. (Optional)
 
     tags_re: null,
     acro_re: null,
@@ -278,7 +282,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         }
 
         // Determine if we need to rebuild this.index from this.source
-        if (options.dirty || ("source" in options) || ("keys" in options)) {
+        if (options.dirty || ("source" in options) || ("keys" in options) || ("use_index_store" in options)) {
             if (self_options.lazy) this.dirty = true; // Schedule later.
             else {
                 this._buildIndexFromSource();

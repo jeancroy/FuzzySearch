@@ -12,8 +12,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
      */
     search: function (query_string) {
 
-        var clock = (window.performance && window.performance.now) ? window.performance : Date;
-        var time_start = clock.now();
+        var time_start = Date.now();
         this.start_time = time_start;
         var options = this.options;
 
@@ -26,6 +25,10 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         var query = this.query = this._prepQuery(query_string);
         var source = this.index;
         var results = [];
+
+        if (options.use_index_store) {
+            source = this._storeSearch(query, source);
+        }
 
         if (options.filter) {
             source = options.filter.call(this, source);
@@ -49,7 +52,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                 results = FuzzySearch.mapField(results, options.output_map, options.output_limit);
         }
 
-        var time_end = clock.now();
+        var time_end = Date.now();
         this.search_time = time_end - time_start;
         this.results = results;
 

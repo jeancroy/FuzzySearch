@@ -11,8 +11,8 @@
     <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.jquery.min.js"></script>
 
-    <script src="../dist/FuzzySearch.min.js"></script>
-    <!--script src="../dist/FuzzySearch.js"></script-->
+    <!--script src="../dist/FuzzySearch.min.js"></script-->
+    <script src="../dist/FuzzySearch.js"></script>
 
 
 
@@ -87,6 +87,9 @@
         <label><input type="checkbox" name="acro" id="acro"/> Enable acronym score "jrrt" can match <b>J</b>ohn <b>R</b>onald
             <b>R</b>euel <b>T</b>olkien </label><br>
 
+        <label><input type="checkbox" name="store" id="store"/> Enable Index Store </label><br>
+
+
     </div>
 
 
@@ -138,10 +141,9 @@
     //
     // Use footer to show some performance stats
     //
-    var clock = (window.performance && window.performance.now) ? window.performance : Date;
 
     function footerTemplate() {
-        var render_end = clock.now();
+        var render_end = Date.now();
         return "<div class='typeahead-footer'> " +
                 "Search took <strong>" + fuzzyhound.search_time.toFixed(3) + " ms</strong><br>" +
                 "Total (search+highlight+render):  <strong>" + (render_end - fuzzyhound.start_time).toFixed(3) + " ms</strong><br>" +
@@ -274,12 +276,17 @@
     });
 
     $('#acro').change(function () {
-
         fuzzyhound.setOptions({
             score_acronym:$(this).is(":checked"),
             dirty: true     //Acronym building is done at source processing stage so we need to reprocess the source.
         });
+    });
 
+    $('#store').change(function () {
+        fuzzyhound.setOptions({
+            use_index_store: $(this).is(":checked"),
+            dirty: true     //store is done at source processing stage so we need to reprocess the source.
+        });
     });
 
 
