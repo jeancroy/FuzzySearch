@@ -6,7 +6,7 @@
 
 /**
  * Take a string into a normal form. Allow to compare in a case insensitive way.
- * Also allow to match accents with their base form "ι" vs "e"
+ * Also allow to match accents with their base form "Γ©" vs "e"
  * Finally standardize token separator to be a single space.
  *
  * @param {string} str
@@ -22,7 +22,7 @@ function normalize(str) {
 
 function getDiacriticsMap() {
     // replace most common accents in french-spanish by their base letter
-    //"γΰαδβζ?θιλκμνοξυςσφτωϊόϋρη"
+    //"Γ£Γ Γ΅Γ¤ΓΆΓ¦αΊ½Γ¨Γ©Γ«ΓªΓ¬Γ­Γ―Γ®ΓµΓ²Γ³Γ¶Γ΄Ε“ΓΉΓΊΓΌΓ»Γ±Γ§"
     var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
     var to = "aaaaaaeeeeeiiiioooooouuuunc";
     var diacriticsMap = {};

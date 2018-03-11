@@ -101,9 +101,10 @@ FuzzySearch.defaultOptions =
 
     identify_item: null,  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
 
-    use_index_store: false, // Enable a time vs memory trade-off for faster search.
-    store_thresh: 0.7      // cutoff point relative to best, to graduate from store phase.
-
+    use_index_store: false, // Enable a time vs memory trade-off for faster search (but longer initial warm-up).
+    store_thresh: 0.7,      // cutoff point relative to best, to graduate from store phase.
+    store_max_results: 1500 // Maximum number of result to graduate from store, to the full search quality algorithm
+                            // Note that store only perform a crude search, ignoring some options, so the best result can be only "meh" here.
 
 };
 

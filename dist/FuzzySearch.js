@@ -113,9 +113,10 @@ FuzzySearch.defaultOptions =
 
     identify_item: null,  // How to uniquely identify an item when adding to the index. Defaults to null, meaning no duplicate detection. Must be a method that takes a single (source) argument.
 
-    use_index_store: false, // Enable a time vs memory trade-off for faster search.
-    store_thresh: 0.7      // cutoff point relative to best, to graduate from store phase.
-
+    use_index_store: false, // Enable a time vs memory trade-off for faster search (but longer initial warm-up).
+    store_thresh: 0.7,      // cutoff point relative to best, to graduate from store phase.
+    store_max_results: 1500 // Maximum number of result to graduate from store, to the full search quality algorithm
+                            // Note that store only perform a crude search, ignoring some options, so the best result can be only "meh" here.
 
 };
 
@@ -1931,9 +1932,9 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
         // Get minimum quality and remap to original items.
         var tresh = idAndCount[0].count * this.options.store_thresh;
         idAndCount = FuzzySearch.filterGTE(idAndCount, "count", tresh);
-        return FuzzySearch.map(idAndCount, function (x) {
-            return source[x.id]
-        });
+        return FuzzySearch.map(idAndCount,
+            function (x) { return source[x.id] },
+            this, this.options.store_max_results);
 
     }
 
@@ -2110,7 +2111,7 @@ function IdAndCount(id, count) {
 
 /**
  * Take a string into a normal form. Allow to compare in a case insensitive way.
- * Also allow to match accents with their base form "�" vs "e"
+ * Also allow to match accents with their base form "é" vs "e"
  * Finally standardize token separator to be a single space.
  *
  * @param {string} str
@@ -2126,7 +2127,7 @@ function normalize(str) {
 
 function getDiacriticsMap() {
     // replace most common accents in french-spanish by their base letter
-    //"������?��������������������"
+    //"ãàáäâæẽèéëêìíïîõòóöôœùúüûñç"
     var from = "\xE3\xE0\xE1\xE4\xE2\xE6\u1EBD\xE8\xE9\xEB\xEA\xEC\xED\xEF\xEE\xF5\xF2\xF3\xF6\xF4\u0153\xF9\xFA\xFC\xFB\xF1\xE7";
     var to = "aaaaaaeeeeeiiiioooooouuuunc";
     var diacriticsMap = {};
