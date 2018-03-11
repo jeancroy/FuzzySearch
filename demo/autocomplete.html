@@ -53,25 +53,38 @@
 
     <div style="text-align: left; display:block; width:90%; max-width:500px; margin:auto">
 
-        <label><input type="radio" name="source" value="small" checked/> Small book dataset, <a href="books.json">about
-            2kb</a>* </label><br>
+        <label><input type="radio" name="source" value="small" checked/> Small book dataset,
+            <a href="books.json">about 2kb</a>*
+        </label><br>
 
-        <label><input type="radio" name="source" value="medium"/> Medium movie dataset, list of title <a
-                href="movies.json">about
-            20kb</a> </label><br>
+        <label><input type="radio" name="source" value="medium"/> Medium movie dataset, list of title
+            <a href="movies.json">about 20kb</a>
+        </label><br>
 
-
-        <label><input type="radio" name="source" value="large"/> Large book dataset, <a href="books_large.json">about
-            220kb</a> </label><br>
+        <label><input type="radio" name="source" value="large"/> Large book dataset,
+            <a href="books_large.json">about 220kb</a>
+        </label><br>
 
         <label><input type="radio" name="source" value="dir"/> Directory dataset (token separated by "/" instead of
-            spaces), <a href="dir.json">about
-                75kb</a> </label><br><br>
+            spaces),
+            <a href="dir.json">about 75kb</a>
+        </label><br>
+
+        <label><input type="radio" name="source" value="names30k"/> Name dataset (30K names, using faker.js),
+            <a href="names30k.json">about 500kb</a>
+        </label><br>
+
+        <label><input type="radio" name="source" value="names100k"/> Name dataset (100K names, using faker.js),
+            <a href="names100k.json">about 1.6Mb</a>
+        </label><br>
+
+
+        <br>
 
 
         <div>
             * small book dataset is provided for comparison against a good edit distance implementation <a
-                href="http://kiro.me/projects/fuse.html">fuse.js</a> (or <a href="http://kiro.me/exp/fuse.html">demo</a>)
+                href="http://fusejs.io/">fuse.js</a>
         </div>
 
     </div>
@@ -243,6 +256,14 @@
 
             case "dir":
                 setsource("dir.json", {title: "."});
+                break;
+
+            case "names30k":
+                setsource("names30k.json", {title: "."});
+                break;
+
+            case "names100k":
+                setsource("names100k.json", {title: "."});
                 break;
 
             case "small":
