@@ -1,5 +1,5 @@
 {
-  "name": "FuzzySearch",
+  "name": "fz-search",
   "version": "1.0.0",
   "description": "Fast aproximate string matching library for use in autocomplete, perform both search and highlight.",
   "main": "dist/FuzzySearch.min.js",
