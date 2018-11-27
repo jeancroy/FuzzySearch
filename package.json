@@ -17,7 +17,8 @@
     "mocha": "^4.0.1"
   },
   "scripts": {
-    "test": "mocha -r jsdom-global/register -r babel-core/register test/**/*.spec.js"
+    "test": "mocha -r jsdom-global/register -r babel-core/register test/**/*.spec.js",
+    "build": "grunt default"
   },
   "repository": {
     "type": "git",

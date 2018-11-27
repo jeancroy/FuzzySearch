@@ -16,7 +16,7 @@ module.exports = function(grunt) {
                       'src/optional/*.js',
                       'src/banners/outro.js'],
 
-                dest: 'dist/<%= pkg.name %>.js'
+                dest: 'dist/FuzzySearch.js' //'dist/<%= pkg.name %>.js'
             }
         },
 
@@ -35,7 +35,8 @@ module.exports = function(grunt) {
 
             dist: {
                 files: {
-                    'dist/<%= pkg.name %>.min.js': ['<%= concat.dist.dest %>']
+                    //'dist/<%= pkg.name %>.min.js': ['<%= concat.dist.dest %>']
+                    'dist/FuzzySearch.min.js' :  ['<%= concat.dist.dest %>']
                 }
             }
 

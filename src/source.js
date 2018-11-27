@@ -180,10 +180,12 @@ function _collectValues(obj, parts, list, level) {
 
         key = parts[level++];
         if (key === "*" || key === "") break;
-        if (!(key in obj)) return list;
+        if (obj == null || !(key in obj)) return list;
         obj = obj[key];
 
     }
+
+    if (obj == null) return list;
 
     var type = Object.prototype.toString.call(obj);
     var isArray = ( type === '[object Array]'  );
@@ -192,16 +194,15 @@ function _collectValues(obj, parts, list, level) {
     if (level === nb_level) {
 
         if (isArray)
-            for (i = -1, olen = obj.length; ++i < olen;) list.push(obj[i].toString());
+            for (i = -1, olen = obj.length; ++i < olen;) list.push(toStringOrDefault(obj[i],""));
 
         else if (isObject) {
             for (key in obj) {
-                if (obj.hasOwnProperty(key)) list.push(obj[key].toString());
+                if (obj.hasOwnProperty(key)) list.push(toStringOrDefault(obj[key],""));
             }
         }
 
-        else list.push(obj.toString());
-
+        else list.push(toStringOrDefault(obj,""));
 
     }
 
@@ -220,4 +221,9 @@ function _collectValues(obj, parts, list, level) {
     }
 
     return list;
+
+}
+
+function toStringOrDefault(obj,def){
+    return obj == null? def : obj.toString();
 }
