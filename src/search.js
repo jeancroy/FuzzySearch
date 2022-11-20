@@ -178,7 +178,7 @@ extend(FuzzySearch.prototype, /** @lends {FuzzySearch.prototype} */ {
                     item_score,
                     matched_field_index,
                     matched_node_index,
-                    item_fields[0][0].join(" ")
+                    (item_fields[0][0] || []).join(" ")
                 ));
 
             }
